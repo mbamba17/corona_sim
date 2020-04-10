@@ -106,3 +106,7 @@ pom <- javfin %>% group_by(datum,sektor1) %>% filter(geo=="HR" & unit=="MIO_NAC"
 ggplot(pom,aes(x=datum,y=iznos,fill=sektor1)) + geom_col(position="fill") + boje_fill
 pom <- javfin %>% group_by(datum,sektor2) %>% filter(geo=="HR" & unit=="MIO_NAC" & sektor1=="Social protection") %>% summarise(iznos=sum(values,na.rm = T))
 ggplot(pom,aes(x=datum,y=iznos,fill=sektor2)) + geom_col(position="fill") + boje_fill
+
+# 6.2. Porezni prihodi
+
+"gov_10a_taxag"
