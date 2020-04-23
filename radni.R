@@ -1,3 +1,4 @@
+library(mFilter)
 library(tidyverse)
 library(scales)
 library(ggthemes)
@@ -59,3 +60,10 @@ skopiraj(pom)
 
 pom <- pu_mjesecni %>% group_by(godina,razina1) %>% summarise(iznos=sum(iznos,na.rm = T)) %>% spread(godina,iznos)
 skopiraj(pom)
+
+# 4. Model za kredite ####
+
+kred <- read_excel(path = "radni.xlsx",sheet = "krediti") %>% mutate(datum=as.Date(datum))
+kred$unemp_gap = (hpfilter(kred$unemp,freq=25000))$cycle
+kred_mdl <- lm(dkred~dbdp_r+unemp_gap,data = kred)
+summary(kred_mdl)

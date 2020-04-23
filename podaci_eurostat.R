@@ -98,44 +98,69 @@ sektor1=c("Total","General public services","General public services","General p
 sektor2=c(NA,NA,"Executive and legislative organs, financial and fiscal affairs, external affairs","Foreign economic aid","General services","Basic research","R&D General public services","General public services n.e.c.","Public debt transactions","Transfers of a general character between different levels of government",NA,"Military defence","Civil defence","Foreign military aid","R&D Defence","Defence n.e.c.",NA,"Police services","Fire-protection services","Law courts","Prisons","R&D Public order and safety","Public order and safety n.e.c.",NA,"General economic, commercial and labour affairs","Agriculture, forestry, fishing and hunting","Fuel and energy","Mining, manufacturing and construction","Transport","Communication","Other industries","R&D Economic affairs","Economic affairs n.e.c.",NA,"Waste management","Waste water management","Pollution abatement","Protection of biodiversity and landscape","R&D Environmental protection","Environmental protection n.e.c.",NA,"Housing development","Community development","Water supply","Street lighting","R&D Housing and community amenities","Housing and community amenities n.e.c.",NA,"Medical products, appliances and equipment","Outpatient services","Hospital services","Public health services","R&D Health","Health n.e.c.",NA,"Recreational and sporting services","Cultural services","Broadcasting and publishing services","Religious and other community services","R&D Recreation, culture and religion","Recreation, culture and religion n.e.c.",NA,"Pre-primary and primary education","Secondary education","Post-secondary non-tertiary education","Tertiary education","Education not definable by level","Subsidiary services to education","R&D Education","Education n.e.c.",NA,"Sickness and disability","Old age","Survivors","Family and children","Unemployment","Housing","Social exclusion n.e.c.","R&D Social protection","Social protection n.e.c.")
 cofog99=c("TOTAL","GF01","GF0101","GF0102","GF0103","GF0104","GF0105","GF0106","GF0107","GF0108","GF02","GF0201","GF0202","GF0203","GF0204","GF0205","GF03","GF0301","GF0302","GF0303","GF0304","GF0305","GF0306","GF04","GF0401","GF0402","GF0403","GF0404","GF0405","GF0406","GF0407","GF0408","GF0409","GF05","GF0501","GF0502","GF0503","GF0504","GF0505","GF0506","GF06", "GF0601","GF0602","GF0603","GF0604","GF0605","GF0606","GF07","GF0701","GF0702","GF0703","GF0704","GF0705","GF0706","GF08","GF0801","GF0802","GF0803","GF0804","GF0805","GF0806","GF09","GF0901","GF0902","GF0903","GF0904","GF0905","GF0906","GF0907","GF0908","GF10", "GF1001","GF1002","GF1003","GF1004","GF1005","GF1006","GF1007","GF1008","GF1009")
 skt <- data.frame(razina1=rep("Rashodi",length(sektor1)),razina3=sektor1,razina4=sektor2,cofog99) %>% na.omit()
-pom1 <- get_eurostat(id="gov_10a_exp") %>% filter(sector=="S13" & na_item %in% c("D1","D3","P2_D29_D5_D8","D4","D62_D632","D7","D9","OP5ANP")) %>% left_join(rzn,by="na_item") %>% inner_join(skt,by="cofog99") %>% left_join(reg,by="geo") %>% mutate(datum = ceiling_date(time,"year")-1, razina5=razina4) %>% select(-time,-cofog99)
-#save(jf_rashodi,file="javni_rashodi.Rda")
+pom1 <- get_eurostat(id="gov_10a_exp") %>% filter(sector=="S13" & na_item %in% c("D1","D3","P2_D29_D5_D8","D4","D62_D632","D7","D9","OP5ANP")) %>% left_join(rzn,by="na_item") %>% inner_join(skt,by="cofog99") %>% mutate(datum = ceiling_date(time,"year")-1, razina5=razina4) %>% select(-time,-cofog99)
 rm(skt,rzn,cofog99,sektor1,sektor2)
-
 # 6.2. Porezni prihodi
-rzn <- read_excel(path = "javne_financije.xlsx",sheet = "prihodi_razine") %>% mutate(razina1 = "Porezni prihodi")
-pom2 <- get_eurostat(id="gov_10a_taxag") %>% filter(sector=="S13" ) %>% left_join(rzn,by="na_item") %>% left_join(reg,by="geo") %>% mutate(datum = ceiling_date(time,"year")-1) %>% select(-time) %>% na.omit()
-
+load("razine_porezni_prihodi.Rda")
+pom2 <- get_eurostat(id="gov_10a_taxag") %>% filter(sector=="S13" ) %>% left_join(rzn,by="na_item") %>% mutate(datum = ceiling_date(time,"year")-1) %>% select(-time) %>% na.omit()
+rm(rzn)
 # 6.3. Ostali prihodi
 rzn <- data.frame(na_item=c("D39REC","D41REC","D42_TO_D45REC","D7REC","D8","D92_D99REC","P11_P12","P131"),razina1=rep("Ostali prihodi",8),razina2=c("Other subsidies on production","Property income","Property income","Other current transfers","Adj. for the change in pension entitlements","Capital transfers","Market output","Market output"),razina3=c("Other subsidies on production","Interest","Other property income","Other current transfers","Adj. for the change in pension entitlements","Other capital transfers and investment grants","Market output and output for own final use","Payments for non-market output"))
-pom3 <- get_eurostat(id="gov_10a_main") %>% filter(sector=="S13" & na_item %in% c("D39REC","D41REC","D42_TO_D45REC","D7REC","D8","D92_D99REC","P11_P12","P131")) %>% left_join(rzn,by="na_item") %>% mutate(razina4=razina3, razina5=razina3)
+pom3 <- get_eurostat(id="gov_10a_main") %>% filter(sector=="S13" & na_item %in% c("D39REC","D41REC","D42_TO_D45REC","D7REC","D8","D92_D99REC","P11_P12","P131")) %>% left_join(rzn,by="na_item") %>% mutate(razina4=razina3, razina5=razina3) %>% mutate(datum = ceiling_date(time,"year")-1) %>% select(-time)
 rm(rzn)
 
 # 6.4. Sklapanje u jednu tablicu
-javfin <- rbind(pom1,pom2,pom3) %>% left_join(reg,by="geo") %>% mutate(datum = ceiling_date(time,"year")-1)
+javfin <- rbind(pom1,pom2,pom3) %>% left_join(reg,by="geo")
 save(javfin,file = "javne_financije.Rda")
+rm(pom1,pom2,pom3)
 
-# 7. Analiza prihoda i rashoda države ####
+# 7. Platna bilanca ####
 
-# razina 1
-pom <- jf_prihodi %>% group_by(datum,razina1) %>% filter(geo=="HR" & unit=="MIO_NAC") %>% summarise(values=sum(values,na.rm=T)) 
-ggplot(pom,aes(x=datum,y=values,fill=razina1)) + geom_col() + theme(legend.position = "top",legend.title = element_blank())
-# porezi na proizvode i uvoz
-pom <- jf_prihodi %>% group_by(datum,razina2) %>% filter(geo=="HR" & unit=="MIO_NAC" & razina1=="Taxes on production and imports") %>% summarise(values=sum(values,na.rm=T)) 
-ggplot(pom,aes(x=datum,y=values,fill=razina2)) + geom_col() + theme(legend.position = "top",legend.title = element_blank())
-# porezi na proizvode
-pom <- jf_prihodi %>% group_by(datum,razina3) %>% filter(geo=="HR" & unit=="MIO_NAC" & razina2=="Taxes on products") %>% summarise(values=sum(values,na.rm=T)) 
-ggplot(pom,aes(x=datum,y=values,fill=razina3)) + geom_col() + theme(legend.position = "top",legend.title = element_blank())
-# doprinosi (ispada da sve ide za mirovine)
-pom <- jf_prihodi %>% group_by(datum,razina2) %>% filter(geo=="HR" & unit=="MIO_NAC" & razina1=="Net social contributions") %>% summarise(values=sum(values,na.rm=T)) 
-ggplot(pom,aes(x=datum,y=values,fill=razina2)) + geom_col() + theme(legend.position = "top",legend.title = element_blank())
-# porez na primanja itd.
-pom <- jf_prihodi %>% group_by(datum,razina2) %>% filter(geo=="HR" & unit=="MIO_NAC" & razina1=="Current taxes on income, wealth, etc.") %>% summarise(values=sum(values,na.rm=T)) 
-ggplot(pom,aes(x=datum,y=values,fill=razina2)) + geom_col() + theme(legend.position = "top",legend.title = element_blank())
-# porez na primanja
-pom <- jf_prihodi %>% group_by(datum,razina3) %>% filter(geo=="HR" & unit=="MIO_NAC" & razina2=="Taxes on income") %>% summarise(values=sum(values,na.rm=T)) 
-ggplot(pom,aes(x=datum,y=values,fill=razina3)) + geom_col() + theme(legend.position = "top",legend.title = element_blank())
+# 7.1. Uvoz i izvoz usluga se može razbiti po državama (zadnji podatak za 2018)
+"bop_its6_tot"
 
-pom <- jf_prihodi %>% group_by(datum,razina1) %>% filter(geo=="HR" & unit=="MIO_NAC" & datum>="2009-12-31") %>% summarise(values=sum(values,na.rm=T)) %>% spread(datum,values)
-skopiraj(pom)
+# 7.2. Remittances se isto mogu razbiti po državama (zadnji podatak za 2019)
+"bop_rem6" # ovdje su samo ukupne usluge
+"bop_its6_det" # ovdje su razbijeni i po vrsti usluge
 
+# 7.3. FDI po djelatnostima, po vrsti investicije, i po zemlji partneru
+"bop_fdi6_pos" # ovo su stanja
+"bop_fdi6_inc" # ovo je prihod po investicijama
+"bop_fdi6_inc" # ovo je flow u godini dana
+# 7.4. 
+
+# 8. Turizam ####
+
+# 8.1. Nights spent at tourist accommodation establishments
+
+# Rezidenti vs nerezidenti
+pom <- get_eurostat(id="tour_occ_nim") %>% filter(c_resid!="TOTAL" & nace_r2=="I551-I553" & unit=="NR" & geo=="HR")
+ggplot(pom,aes(x=time,y=values,fill=c_resid)) + geom_area() + scale_y_continuous(labels = comma) + theme(legend.position = "top") + labs(x="",y="Broj noćenja") + boje_fill
+# Vrste smještaja
+pom <- get_eurostat(id="tour_occ_nim") %>% filter(c_resid=="TOTAL" & nace_r2 %in% c("I551","I552","I551") & unit=="NR" & geo=="HR") %>% mutate(godina=year(time),nace_r2=case_when(nace_r2=="I551"~"Hoteli",nace_r2=="I553"~"Kampovi",nace_r2=="I552"~"Ostalo")) %>% group_by(nace_r2,godina) %>% summarise(values=sum(values,na.rm=T))
+ggplot(pom,aes(x=godina,y=values,fill=nace_r2)) + geom_col() + scale_y_continuous(labels = comma) + theme(legend.position = "top") + labs(x="",y="Broj noćenja") + boje_fill
+
+# 8.2. Nights spent at tourist accommodation establishments
+
+# Rezidenti vs nerezidenti
+pom <- get_eurostat(id="tour_occ_arm") %>% filter(c_resid!="TOTAL" & nace_r2=="I551-I553" & unit=="NR" & geo=="HR")
+ggplot(pom,aes(x=time,y=values,fill=c_resid)) + geom_area() + scale_y_continuous(labels = comma) + theme(legend.position = "top") + labs(x="",y="Broj dolazaka") + boje_fill
+# Vrste smještaja
+pom <- get_eurostat(id="tour_occ_arm") %>% filter(c_resid=="TOTAL" & nace_r2 %in% c("I551","I552","I551") & unit=="NR" & geo=="HR") %>% mutate(godina=year(time),nace_r2=case_when(nace_r2=="I551"~"Hoteli",nace_r2=="I553"~"Kampovi",nace_r2=="I552"~"Ostalo")) %>% group_by(nace_r2,godina) %>% summarise(values=sum(values,na.rm=T))
+ggplot(pom,aes(x=godina,y=values,fill=nace_r2)) + geom_col() + scale_y_continuous(labels = comma) + theme(legend.position = "top") + labs(x="",y="Broj dolazaka") + boje_fill
+
+# 8.3. Popunjenost kreveta u hotelima
+pom <- get_eurostat(id="tour_occ_mnor") %>% filter(geo=="HR" & accommod=="BEDPL") %>% mutate(godina=year(time)) 
+ggplot(pom,aes(x=time,y=values)) + geom_col()
+
+# 8.4. Broj smještajnih jedinica
+pom <- get_eurostat(id="tour_cap_nuts2") %>% filter(nace_r2 %in% c("I551","I552","I551") & unit=="NR" & geo%in% c("HR0","HR03","HR04") & accommod=="BEDPL") %>% mutate(nace_r2=case_when(nace_r2=="I551"~"Hoteli",nace_r2=="I553"~"Kampovi",nace_r2=="I552"~"Ostalo"),geo=case_when(geo=="HR0"~"Hrvatska",geo=="HR03"~"Jadran",geo=="HR04"~"Kontinent")) %>% group_by(geo,nace_r2,time) %>% summarise(values=sum(values,na.rm=T))
+ggplot(pom,aes(x=time,y=values)) + geom_col() +facet_grid(geo~nace_r2,scales="free")+ scale_y_continuous(labels = comma) + theme(legend.position = "top") + labs(x="",y="Broj kreveta") + boje_fill
+
+# 8.5. PArticipiranje u turizmu
+pom <- get_eurostat(id="tour_dem_totot") %>% filter(unit=="PC_POP" & geo=="HR")
+ggplot(pom,aes(x=time,y=values)) + geom_col() +facet_grid(partner~duration,scales="free")+ scale_y_continuous(labels = comma) + theme(legend.position = "top") + labs(x="",y="Broj kreveta") + boje_fill
+
+# 8.6. Potrošnja u turizmu
+pom <- get_eurostat(id="tour_dem_extot") %>% filter(unit=="THS_NAC" & geo=="HR" & duration=="N_GE1" & partner!="WORLD" & purpose=="TOTAL")
+ggplot(pom,aes(x=time,y=values,fill=partner)) + geom_col() + scale_y_continuous(labels = comma) + theme(legend.position = "top") + labs(x="",y="000 HRK") + boje_fill
