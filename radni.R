@@ -67,3 +67,19 @@ kred <- read_excel(path = "radni.xlsx",sheet = "krediti") %>% mutate(datum=as.Da
 kred$unemp_gap = (hpfilter(kred$unemp,freq=25000))$cycle
 kred_mdl <- lm(dkred~dbdp_r+unemp_gap,data = kred)
 summary(kred_mdl)
+
+# 5. Model za inflaciju ####
+infl <- read_excel(path = "radni.xlsx",sheet = "inflacija",range = "A2:L82") %>% mutate(datum=as.Date(datum))
+#pom <- get_eurostat("prc_hicp_manr") %>% filter(coicop=="CP00" & geo=="EU") %>% mutate(datum = ceiling_date(time,"month")-1) %>% select(datum,infl_eu=values)
+#infl <- left_join(infl,pom,by="datum")
+infl$unemp_s1_gap = (hpfilter(infl$unemp_s1,freq=25000))$cycle
+infl$unemp_s2_gap = (hpfilter(infl$unemp_s2,freq=25000))$cycle
+infl$unemp_s3_gap = (hpfilter(infl$unemp_s3,freq=25000))$cycle
+# inflacija
+infl_mdl <- lm(infl~unemp_gap+infl_eu,data = infl)
+summary(infl_mdl)
+# core inflacija
+infl_mdl <- lm(infl_core~unemp_gap+infl_eu,data = infl)
+summary(infl_mdl)
+
+skopiraj(infl)
