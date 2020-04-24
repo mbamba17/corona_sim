@@ -146,7 +146,7 @@ ggplot(pom,aes(x=time,y=values,fill=c_resid)) + geom_area() + scale_y_continuous
 pom <- get_eurostat(id="tour_occ_nim") %>% filter(c_resid=="TOTAL" & nace_r2 %in% c("I551","I552","I551") & unit=="NR" & geo=="HR") %>% mutate(godina=year(time),nace_r2=case_when(nace_r2=="I551"~"Hoteli",nace_r2=="I553"~"Kampovi",nace_r2=="I552"~"Ostalo")) %>% group_by(nace_r2,godina) %>% summarise(values=sum(values,na.rm=T))
 ggplot(pom,aes(x=godina,y=values,fill=nace_r2)) + geom_col() + scale_y_continuous(labels = comma) + theme(legend.position = "top") + labs(x="",y="Broj noćenja") + boje_fill
 
-# 8.2. Nights spent at tourist accommodation establishments
+# 8.2. Arrivals at tourist accommodation establishments
 
 # Rezidenti vs nerezidenti
 pom <- get_eurostat(id="tour_occ_arm") %>% filter(c_resid!="TOTAL" & nace_r2=="I551-I553" & unit=="NR" & geo=="HR")

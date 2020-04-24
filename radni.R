@@ -29,9 +29,9 @@ mdl <- lm(dunemp~dbdp_r+lag(unemp,1),data = temp)
 summary(mdl)
 
 # 2. Procjena kretanja bruto plaća ####
-temp <- read_excel(path = "place.xlsx",sheet="izvoz_r")
+wage <- read_excel(path = "place.xlsx",sheet="izvoz_r",range="A1:F89")
 #v1
-mdl <- lm(dwage~infl+unemp+dprod,data = temp)
+mdl <- lm(dwage~infl+unemp+dprod,data = wage)
 summary(mdl)
 plot(mdl)
 pom <- data.frame(mdl$model,reziduali=mdl$residuals) %>% mutate(dwage_proc=dwage-reziduali)
@@ -63,10 +63,16 @@ skopiraj(pom)
 
 # 4. Model za kredite ####
 
-kred <- read_excel(path = "radni.xlsx",sheet = "krediti") %>% mutate(datum=as.Date(datum))
+kred <- read_excel(path = "radni.xlsx",sheet = "krediti",range="A1:E81") %>% mutate(datum=as.Date(datum)) %>% select(-unemp_gap)
 kred$unemp_gap = (hpfilter(kred$unemp,freq=25000))$cycle
-kred_mdl <- lm(dkred~dbdp_r+unemp_gap,data = kred)
+kred <- kred %>% filter(datum>"2007-12-31")
+# sa lagom i bdp-om
+kred_mdl <- lm(dkred~lag(dkred,4)+dbdp_r,data = kred)
 summary(kred_mdl)
+# sa gapom nezaposlenosti i bdp-om
+kred_mdl <- lm(dkred~unemp_gap+dbdp_r,data = kred)
+summary(kred_mdl)
+
 
 # 5. Model za inflaciju ####
 infl <- read_excel(path = "radni.xlsx",sheet = "inflacija",range = "A2:L82") %>% mutate(datum=as.Date(datum))
