@@ -4,17 +4,16 @@ library(ggthemes)
 library(extrafont)
 library(eurostat)
 library(lubridate)
+library(ecb)
 
 # Funkcija za kopiranje u excel ####
 skopiraj <- function(x,row.names=FALSE,col.names=TRUE,...) {
   write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
 }
 
-gtema <- theme_minimal() + theme(panel.background = element_rect(fill="#e7eaf6",linetype = 0),plot.background = element_rect(fill="#e7eaf6",linetype = 0),legend.box.background = element_rect(fill="#e7eaf6",linetype = 0),text = element_text(colour = "#000000"),plot.caption = element_text(hjust = 0),legend.title = element_blank(),panel.border = element_blank(),axis.line = element_blank(),panel.grid.major = element_line(size = 0.5, linetype = "dotted",colour = "#233142"))
+gtema <- theme_minimal() + theme(panel.background = element_rect(fill="#e7eaf6",linetype = 0),plot.background = element_rect(fill="#e7eaf6",linetype = 0),legend.box.background = element_rect(fill="#e7eaf6",linetype = 0),text = element_text(colour = "#000000"),plot.caption = element_text(hjust = 0),legend.position = "top",legend.title = element_blank(),panel.border = element_blank(),axis.line = element_blank(),panel.grid.major = element_line(size = 0.5, linetype = "dotted",colour = "#233142"))
 theme_set(gtema)
-ggplot(pom,aes(x=datum,y=values,col=regija)) + geom_line(size=2) + theme(legend.position = "top",legend.title = element_blank()) + labs(x="",y="",title="Industrijska proizvodnja",caption = paste("Zadnji datum: ",max(pom$datum))) + scale_x_date(breaks = "1 year",labels = scales::date_format("%y")) + boje_col
 
-rm(pozadina,tekst)
 # paleta boja
 boje_fill <- scale_fill_manual(values = c("#155e63","#e84545","#25a55f","#ffc93c","#9b5d73","#ff7c38","#7e6752","#679186","#2e99b0","#01d28e","#cd8d7b","#bbbbbb","#f7be16","#b5525c","#4f81c7","#ff8a5c","#32ff6a","#393e46","#df0054","#f69314"))
 boje_col <- scale_color_manual(values = c("#155e63","#e84545","#25a55f","#ffc93c","#9b5d73","#ff7c38","#7e6752","#679186","#2e99b0","#01d28e","#cd8d7b","#bbbbbb","#f7be16","#b5525c","#4f81c7","#ff8a5c","#32ff6a","#393e46","#df0054","#f69314"))
@@ -219,3 +218,29 @@ ggplot(pom,aes(x=datum,y=values,col=regija)) + geom_line(size=2) + theme(legend.
 # 10.8. Usluge - cijena proizvodnje
 pom <- get_eurostat("sts_sepp_q") %>% filter(nace_r2=="H494-N812_STS" & s_adj=="NSA" & indic_bt=="PRON" & unit=="I15") %>% mutate(datum = ceiling_date(time,"quarter")-1) %>% left_join(reg,by="geo") %>% select(datum,geo,regija,values) %>% na.omit() %>% group_by(datum,regija) %>% filter(datum>="2000-01-01") %>% summarise(values=mean(values,na.rm = T))
 ggplot(pom,aes(x=datum,y=values,col=regija)) + geom_line(size=2) + theme(legend.position = "top",legend.title = element_blank()) + labs(x="",y="",title="Usluge - cijena proizvodnje",caption = paste("Zadnji datum: ",max(pom$datum))) + scale_x_date(breaks = "1 year",labels = scales::date_format("%y")) + boje_col
+
+# 11. Prinosi i kstope ####
+
+# 11.1. kstope na stanja (HH + NFC)
+pom <- get_data(key = "MIR.M..B.A20.A.R.A..EUR.O") %>% mutate(sektor=case_when(bs_count_sector=="2240"~"NFC",bs_count_sector=="2250"~"HH")) %>% mutate(datum = make_date(ifelse(substr(obstime,6,7)=="12",as.numeric(substr(obstime,1,4))+1,as.numeric(substr(obstime,1,4))), ifelse(substr(obstime,6,7)=="12",1,as.numeric(substr(obstime,6,7))+1), 1)-1) %>% select(datum,geo=ref_area,sektor,kstopa=obsvalue) 
+ggplot(pom,aes(x=datum,y=kstopa)) + geom_line() + facet_wrap(~geo, scales="free")
+
+# 11.2. Yieldovi na dugoročne državne obveznice - EMU convergence criterion bond yields ####
+pom2 <- get_eurostat(id="irt_lt_mcby_m") %>% select(-int_rt,kstopa=values) %>% mutate(datum = ceiling_date(time,"month")-1,sektor="govt_yld") %>% filter(datum>"2002-12-31") %>% select(datum,geo,sektor,kstopa) %>% na.omit()
+pom <- rbind(pom1,pom2)
+ggplot(pom,aes(x=datum,y=kstopa,col=sektor)) + geom_line(size=1.2) + facet_wrap(~geo, scales="free") + boje_col
+
+
+# Model marže na kredite HH&NFC
+# marža
+pom1 <- get_data(key = "RAI.M..LMGOLNFCH..MIR.Z") %>% mutate(datum = make_date(ifelse(substr(obstime,6,7)=="12",as.numeric(substr(obstime,1,4))+1,as.numeric(substr(obstime,1,4))), ifelse(substr(obstime,6,7)=="12",1,as.numeric(substr(obstime,6,7))+1), 1)-1) %>% select(datum,geo=ref_area,marze_HH_NFC=obsvalue) %>% group_by(datum,geo) %>% summarise(marze_HH_NFC=mean(marze_HH_NFC,na.rm=T)) %>% mutate(marze_HH_NFC=ifelse(marze_HH_NFC==1,NA,marze_HH_NFC))
+# 
+ggplot(pom,aes(x=datum,y=marze_HH_NFC)) + geom_line() + facet_wrap(~geo, scales="free")
+
+# 12. Tecaj ####
+pom <- get_data("EXR.Q.HRK.EUR.SP00.A") %>% select(obstime,tecaj_eur=obsvalue) %>% mutate(datum = make_date(ifelse(substr(obstime,7,7)=="4",as.numeric(substr(obstime,1,4))+1,as.numeric(substr(obstime,1,4))), ifelse(substr(obstime,7,7)=="4",1,as.numeric(substr(obstime,7,7))*3+1), 1)-1) %>% select(-obstime)
+
+# 13. Prinosi ####
+# 1.1. Yieldovi na dugoročne državne obveznice - EMU convergence criterion bond yields ####
+pom <- get_eurostat(id="irt_lt_mcby_m") %>% filter(geo=="HR") %>% mutate(datum = ceiling_date(time,"month")-1) %>% select(datum,geo,yld=values)
+ggplot(pom,aes(x=datum,y=yld))+geom_line()

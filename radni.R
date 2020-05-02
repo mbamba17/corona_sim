@@ -89,3 +89,29 @@ infl_mdl <- lm(infl_core~unemp_gap+infl_eu,data = infl)
 summary(infl_mdl)
 
 skopiraj(infl)
+
+# 6. Model za tečaj ####
+fx <- read_excel(path = "radni.xlsx",sheet = "tecaj",range = "A1:f81") %>% mutate(datum=as.Date(datum)) %>% na.omit()
+# model samo za tekućim računom
+fx_mdl <- lm(tecaj~reserv+curacc,data = fx)
+summary(fx_mdl)
+# model samo za ukupnom bilancom (bez rezervi)
+fx_mdl <- lm(tecaj~reserv+bop,data = fx)
+summary(fx_mdl)
+
+# model samo za tekućim računom
+fx_mdl <- lm(dtecaj~reserv+curacc,data = fx)
+summary(fx_mdl)
+# model samo za ukupnom bilancom (bez rezervi)
+fx_mdl <- lm(dtecaj~reserv+bop,data = fx)
+summary(fx_mdl)
+
+# 7. Model za kamatne stope ####
+kstope <- read_excel(path = "radni.xlsx",sheet = "kstope",range = "A1:f73") %>% mutate(datum=as.Date(datum)) %>% na.omit()
+kstope$dkred_gap = (hpfilter(kstope$dkred,freq=25000))$cycle
+# kratkoročne kstope
+ks_mdl <- lm(kks~lag(kks,1)+prinos+euribor,data = kstope)
+summary(ks_mdl)
+# dugoročne kstope
+ks_mdl <- lm(dks~lag(kks,1)+lag(dks,1),data = kstope)
+summary(ks_mdl)
