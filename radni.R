@@ -115,3 +115,10 @@ summary(ks_mdl)
 # dugoročne kstope
 ks_mdl <- lm(dks~lag(kks,1)+lag(dks,1),data = kstope)
 summary(ks_mdl)
+
+# 8. HZZ potpore - podaci ####
+library(rjson)
+library(jsonlite)
+base_url = "https://mjera-orm.hzz.hr/korisnici-potpore/ozujak-2020/json/"
+hzz_podaci <- fromJSON(base_url)
+hzz_podaci %>% summarise(SupportPaidAmount=sum(SupportPaidAmount),SupportedEmployeeNumber=sum(SupportedEmployeeNumber))
