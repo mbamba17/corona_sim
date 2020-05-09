@@ -6,6 +6,7 @@ library(extrafont)
 library(eurostat)
 library(lubridate)
 library(ecb)
+library(readxl)
 
 # Funkcija za kopiranje u excel ####
 skopiraj <- function(x,row.names=FALSE,col.names=TRUE,...) {
@@ -21,6 +22,25 @@ boje_col <- scale_color_manual(values = c("#155e63","#e84545","#25a55f","#ffc93c
 
 # Member States of the European Union
 reg = data.frame(geo=c("AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE","GB"),country=c("Austria","Belgium","Bulgaria","Croatia","Cyprus","Czech Rep.","Denmark","Estonia","Finland","France","Germany","Greece","Hungary","Ireland","Italy","Latvia","Lithuania","Luxembourg","Malta","Netherlands","Poland","Portugal","Romania","Slovakia","Slovenia","Spain","Sweden","United Kingdom"),regija=c("Ostale zemlje EU","Ostale zemlje EU","Zemlje SIE","HR","Ostale zemlje EU","Zemlje SIE","Ostale zemlje EU","Zemlje SIE","Ostale zemlje EU","Ostale zemlje EU","Ostale zemlje EU","Ostale zemlje EU","Zemlje SIE","Ostale zemlje EU","Ostale zemlje EU","Zemlje SIE","Zemlje SIE","Ostale zemlje EU","Ostale zemlje EU","Ostale zemlje EU","Zemlje SIE","Ostale zemlje EU","Zemlje SIE","Zemlje SIE","Zemlje SIE","Ostale zemlje EU","Ostale zemlje EU","Ostale zemlje EU"))
+
+# Slika 0. COVID-19 podaci ####
+library(rjson)
+library(jsonlite)
+covid <- fromJSON("https://api.covid19api.com/all")
+covid <- covid %>% mutate(datum=as.Date(Date))
+save(covid,file="covid.Rda")
+pom1 <- covid %>% filter(CountryCode %in% c("HR","CN","US","IT","ES","DE","UK","SE","RU")) %>% select(datum,geo=CountryCode,Confirmed,Deaths,Recovered,Active) %>% group_by(datum,geo) %>% summarise(Slučajevi=sum(Confirmed,na.rm=T),Preminuli=sum(Deaths,na.rm=T),Oporavljeni=sum(Recovered,na.rm=T),Aktivni=sum(Active,na.rm=T))
+pom2 <- data.frame(geo=c("HR","CN","US","IT","ES","DE","UK","SE","RU"),population=c(4.089,1392,327.167,60.431,46.724,82.928,66.489,10.183,144.478))
+pom <- left_join(pom1,pom2,by="geo") %>% mutate(`Slučajevi`=`Slučajevi`/population,Preminuli=Preminuli/population,Oporavljeni=Oporavljeni/population,Aktivni=Aktivni/population) %>% select(-population)%>% gather(value = "broj",key = "varijabla",-datum,-geo) %>% filter(datum>="2020-03-01")
+ggplot(pom,aes(x=datum,y=broj,col=geo)) + geom_line(size=1.2) + facet_wrap(~varijabla,scales="free") + boje_col + labs(x="",y="Broj slučajeva",title="Zdravstvena kriza u većini zemalja prošla vrhunac",caption="Izvor: John Hopkins CSSE")
+rm(pom1,pom2,covid)
+
+# Slika 01. Lockdown tracker ####
+library(rio)
+pom <- rio::import(file="https://covid19-lockdown-tracker.netlify.com/lockdown_dates.csv")
+pom <- pom1 %>% filter((Country %in% reg$country | Country %in% c("Czech Rep.")) & Level=="National") %>% select(geo=Country,start=`Start date`,end=`End date`) %>% mutate(start=as.Date(start),end=as.Date(end))
+ggplot(pom) + geom_segment(aes(x=start,xend=end,y=geo,yend=geo),size=1.05,col="#155e63") + geom_point(size=3,aes(x=start,y=geo),col="#E84545") + geom_point(size=3,aes(x=end,y=geo),col="#01D28E") + labs(x="",y="",title="Epidemijske mjere u većini zemalja EU bliže se kraju",caption = "Izvor: Aura Vision") + geom_vline(xintercept = as.Date("2020-05-15"),col="#ffc93c")
+
 
 # Slika 1. Struktura BDP-a proizvodna metoda ####
 
@@ -63,13 +83,48 @@ ggplot(pom,aes(x=datum,y=values,col=regija)) + geom_line(size=2) + theme(legend.
 
 
 # Slika 6. Inflacija i doprinosi ####
-# inflacija
-pom <- get_eurostat("ei_bsco_m") %>% filter(s_adj=="SA" & indic=="BS-CSMCI" & unit=="BAL")
+# stope inflacije
+pom1 <- get_eurostat("prc_hicp_manr") %>% filter(coicop %in% c("CP01","CP02","CP03","CP04","CP05","CP06","CP07","CP08","CP09","CP10","CP11","CP12") & geo=="HR" & unit=="RCH_A") %>% mutate(datum = ceiling_date(time,"month")-1) %>% mutate(dobro=case_when(coicop=="CP01"~"Hrana i piće",coicop=="CP02"~"Alkohol i cigarete",coicop=="CP03"~"Odjeća i obuća",coicop=="CP04"~"Voda, struja i goriva",coicop=="CP05"~"Namještaj",coicop=="CP06"~"Zdravlje",coicop=="CP07"~"Prijevoz",coicop=="CP08"~"Komunikacije",coicop=="CP09"~"Rekreacija i kultura",coicop=="CP10"~"Edukacija",coicop=="CP11"~"Restorani i hoteli",coicop=="CP12"~"Ostala dobra")) %>% filter(month(datum)==12 | datum=="2020-03-31") %>% select(datum,dobro,stopa_rasta=values)
+pom1$datum[pom1$datum=="2020-03-31"] <- as.Date("2020-12-31")
 # weightovi
-pom <- get_eurostat(id="prc_hicp_inw") %>% filter(coicop %in% c("CP01","CP02","CP03","CP04","CP05","CP06","CP07","CP08","CP09","CP10","CP11","CP12") & geo=="HR") %>% mutate(datum = ceiling_date(time,"year")-1) %>% mutate(dobro=case_when(coicop=="CP01"~"Hrana i piće",coicop=="CP02"~"Alkohol i cigare",coicop=="CP03"~"Odjeća i obuća",coicop=="CP04"~"Voda, struja i goriva",coicop=="CP05"~"Namještaj",coicop=="CP06"~"Zdravlje i edukacija",coicop=="CP07"~"Prijevoz",coicop=="CP08"~"Komunikacije",coicop=="CP09"~"Rekreacija i kultura",coicop=="CP10"~"Zdravlje i edukacija",coicop=="CP11"~"Restorani i hoteli",coicop=="CP12"~"Ostalo")) %>% mutate(values=values/10) %>% group_by(geo,datum,dobro) %>% summarise(values=sum(values,na.rm=T))
-ggplot(pom,aes(x=datum,y=values,fill=dobro)) + geom_col() + boje_fill + theme(legend.position = "top",legend.title = element_blank(),axis.text.x = element_text(angle = 90, hjust = 1)) + scale_x_date(breaks = "1 year",labels = date_format("%Y"))
-kriza <- data.frame(begin=as.Date("2008-12-31"),end=as.Date("2010-12-31"))
-ggplot(pom,aes(x=datum,y=values)) + geom_col() + geom_rect(data = kriza,aes(xmin = begin, xmax = end, ymin = -Inf, ymax = +Inf),inherit.aes = FALSE, fill = "red", alpha = 0.2) + facet_wrap(~dobro) + boje_fill + theme(legend.position = "top",legend.title = element_blank(),axis.text.x = element_text(angle = 90, hjust = 1)) + scale_x_date(breaks = "1 year",labels = scales::date_format("%Y"))
+pom2 <- get_eurostat(id="prc_hicp_inw") %>% filter(coicop %in% c("CP01","CP02","CP03","CP04","CP05","CP06","CP07","CP08","CP09","CP10","CP11","CP12") & geo=="HR") %>% mutate(datum = ceiling_date(time,"year")-1) %>% mutate(dobro=case_when(coicop=="CP01"~"Hrana i piće",coicop=="CP02"~"Alkohol i cigarete",coicop=="CP03"~"Odjeća i obuća",coicop=="CP04"~"Voda, struja i goriva",coicop=="CP05"~"Namještaj",coicop=="CP06"~"Zdravlje",coicop=="CP07"~"Prijevoz",coicop=="CP08"~"Komunikacije",coicop=="CP09"~"Rekreacija i kultura",coicop=="CP10"~"Edukacija",coicop=="CP11"~"Restorani i hoteli",coicop=="CP12"~"Ostala dobra")) %>% mutate(values=values/1000) %>% select(datum,dobro,ponder=values)
+#ukupna inflacija
+pom3 <- get_eurostat("prc_hicp_manr") %>% filter(coicop %in% c("CP00") & geo=="HR" & unit=="RCH_A") %>% mutate(datum = ceiling_date(time,"month")-1) %>% filter(month(datum)==12 | datum=="2020-03-31") %>% select(datum,inflacija=values)
+pom3$datum[pom3$datum=="2020-03-31"] <- as.Date("2020-12-31")
+pom3 <- pom3 %>% mutate(datum=floor_date(datum,unit = "year"))
+# sklapanje dobara za doprinose
+pom <- inner_join(pom1,pom2,by=c("datum","dobro")) %>% mutate(doprinos=stopa_rasta*ponder) %>% mutate(dobro=case_when(dobro=="Edukacija"~"Ostala dobra",dobro=="Namještaj"~"Ostala dobra",dobro=="Rekreacija i kultura"~"Ostala dobra",dobro=="Zdravlje"~"Ostala dobra",T~dobro)) %>% group_by(datum,dobro) %>% summarise(doprinos=sum(doprinos)) %>% ungroup() %>% mutate(datum=floor_date(datum,unit = "year"))
+# grafikon
+kriza <- data.frame(begin=as.Date("2007-06-30"),end=as.Date("2010-06-30"))
+ggplot(pom,aes(x=datum,y=doprinos)) + geom_col(aes(fill=dobro)) + boje_fill + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_x_date(breaks = "1 year",labels = date_format("%Y")) + labs(x="",y="postotni bodovi",title="U početnom razdoblju krize prevladavaju deflacijski pritisci",subtitle = "doprinosi pojedinačnih kategorija dobara ukupnoj stopi inflacije",caption = "Napomena: Ostala dobra uključuju kategorije: namještaj, edukacija, zdravlje te rekreacija i kultura.\nIzvor: Eurostat") + geom_line(data = pom3,aes(x=datum,y=inflacija),size=1.5) + geom_rect(data = kriza,aes(xmin = begin, xmax = end, ymin = -Inf, ymax = +Inf),inherit.aes = FALSE, fill = "red", alpha = 0.15)
+
+# Slika 7. Cijene nekretnina i doprinosi ####
+# stope rasta
+pom1 <- get_eurostat("prc_hpi_q") %>% filter(purchase %in% c("DW_NEW","DW_EXST") & geo=="HR" & unit=="RCH_A") %>% mutate(datum = ceiling_date(time,"quarter")-1) %>% mutate(tip_nekretnine=case_when(purchase=="DW_NEW"~"Novogradnja",purchase=="DW_EXST"~"Postojeće nekretnine")) %>% select(datum,tip_nekretnine,stopa_rasta=values) %>% mutate(godina = ceiling_date(datum,"year")-1)
+# weightovi
+pom2 <- get_eurostat(id="prc_hpi_inw") %>% filter(purchase %in% c("DW_NEW","DW_EXST") & geo=="HR") %>% mutate(godina = ceiling_date(time,"year")-1) %>% mutate(tip_nekretnine=case_when(purchase=="DW_NEW"~"Novogradnja",purchase=="DW_EXST"~"Postojeće nekretnine")) %>% mutate(values=values/1000) %>% select(godina,tip_nekretnine,ponder=values)
+#ukupni indeks
+pom3 <- get_eurostat("prc_hpi_q") %>% filter(purchase %in% c("TOTAL") & geo=="HR" & unit=="RCH_A") %>% mutate(datum = ceiling_date(time,"quarter")-1) %>% select(datum,indeks=values) %>% mutate(datum=floor_date(datum,unit = "quarter"))
+# sklapanje za doprinose
+pom <- inner_join(pom1,pom2,by=c("godina","tip_nekretnine")) %>% mutate(doprinos=stopa_rasta*ponder)  %>% ungroup() %>% mutate(datum=floor_date(datum,unit = "quarter"))
+ggplot(pom,aes(x=datum,y=doprinos)) + geom_col(aes(fill=tip_nekretnine)) + boje_fill + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_x_date(breaks = "1 year",labels = date_format("%Y")) + labs(x="",y="postotni bodovi",title="Cijene postojeće nekretnina brže se korigiraju",subtitle = "doprinosi tipova nekretnina ukupnoj godišnjoj stopi promjene cijena",caption = "Izvor: Eurostat") + geom_line(data = pom3,aes(x=datum,y=indeks),size=1.5)
+
+# Slika 7.b. Indeksi cijena ukupni, novi, postojeći
+pom <- get_eurostat("prc_hpi_q") %>% filter(unit=="RCH_A") %>% mutate(datum = ceiling_date(time,"quarter")-1) %>% mutate(tip_nekretnine=case_when(purchase=="DW_NEW"~"Novogradnja",purchase=="DW_EXST"~"Postojeće nekretnine",T~"Ukupno")) %>% select(datum,geo,tip_nekretnine,stopa_rasta=values) %>% left_join(reg,by="geo") %>% group_by(datum,regija,tip_nekretnine) %>% summarise(stopa_rasta=mean(stopa_rasta,na.rm = T)) %>% na.omit()
+ggplot(pom,aes(x=datum,y=stopa_rasta,col=tip_nekretnine)) + geom_line(size=1.5) + facet_wrap(~regija,scales = "free") + boje_col
+
+# Slika 8. Nekretnine ####
+# 8.a. Indeksi cijena
+pom <- read_excel(path = "D:/mbamba/skripte/corona_sim/popratni_podaci/nekretnine.xlsx") %>% gather("regija","indeks",-datum) %>% mutate(datum=as.Date(datum))
+ggplot(pom,aes(x=datum,y=indeks,col=regija)) + geom_line(size=2) + boje_col + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_x_date(breaks = "1 year",labels = date_format("%Y")) + labs(x="",y="indeks, 2015. = 100",title="Rast cijena koncentriran u glavnom gradu i na obali",subtitle = "indeks cijena stambenih nekretnina",caption = "Izvor: DZS")
+# 8.b. Homeownership vs. procyclicality 
+pom1 <- get_eurostat("prc_hpi_q") %>% filter(purchase=="TOTAL" & unit=="INX_Q") %>% mutate(datum = ceiling_date(time,"quarter")-1) %>% filter(datum>="2007-12-31" & datum<="2013-12-31") %>% group_by(geo) %>% summarise(maksimum=max(values,na.rm=T),minimum=min(values,na.rm=T)) %>% mutate(range=maksimum-minimum)
+pom2 <- get_eurostat(id="ilc_lvho02") %>% filter(tenure=="OWN" & incgrp=="TOTAL" & hhtyp=="TOTAL")%>% mutate(datum = ceiling_date(time,"year")-1) %>% filter(datum>="2007-12-31" & datum<="2013-12-31") %>% group_by(geo) %>% summarise(ownership=mean(values,na.rm = T))
+pom <- inner_join(pom1,pom2,by="geo") %>% filter(!geo %in% c("EA","EA19","EU","EU27_2020","EU28")) %>% left_join(reg,by="geo") %>% na.omit()
+ggplot(pom,aes(x=ownership,y=range)) + geom_point(size=4,aes(col=regija)) + geom_text(inherit.aes = T,aes(label=geo),nudge_x = 1.5) + geom_smooth(method = "lm",se=F)+ boje_col + labs(x="Posjedovanje nekretnine (prosjek 2008.-2013., u % ukupne populacije)",y="Pad cijena nekretnina u razdoblju 2008. - 2013.",title = "Izraženije posjedovanje nekretnina u protekloj krizi djelovao prociklično",caption = "Napomena: Pad cijena nekretnina procijenjen je kao razlika najveće i najmanje vrijednosti u promatranom razdoblju.\nIzvor: Eurostat")
+
+
+
 
 # Slika 20. Alluvial financijski računi ####
 load("D:/mbamba/dwh/Financijski_racuni/FinRacuni.Rda")
