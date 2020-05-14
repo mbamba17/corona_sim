@@ -122,7 +122,7 @@ pom1 <- get_eurostat(id="namq_10_gdp") %>% filter(s_adj=="SCA" & na_item %in% c(
 pom2 <- pom1 %>% group_by(datum,regija) %>% summarise(bdp_total=sum(bdp_y,na.rm=T))
 pom <- inner_join(pom1,pom2,by=c("datum","regija")) %>% mutate(udio=bdp_y/bdp_total) %>% mutate(doprinos=(bdp_y/lag(bdp_y,4)-1)*100*lag(udio,4))%>% filter(datum>="2001-12-31" & datum<="2019-12-31")
 pom2 <- pom2 %>% group_by(regija) %>% mutate(dbdp=(bdp_total/lag(bdp_total,4)-1)*100) %>% filter(datum>="2001-12-31" & datum<="2019-12-31")
-ggplot(pom,aes(x=datum,y=doprinos)) + geom_col(alpha=0.8,aes(fill=sektor))  + geom_line(data = pom2,aes(x=datum,y=dbdp),size=1.5) + facet_wrap(~regija) + boje_fill + labs(x="",y="postotni bodovi",title = "Gospodarski rast generira osobna potrošnja, no dubinu kontrakcije određuju investicije",subtitle = "Doprinosi pojedinih djelatnosti realnom rastu bruto domaćeg proizvoda",caption = "Izvor: Eurostat") + scale_y_continuous(breaks = -7:7)
+ggplot(pom,aes(x=datum,y=doprinos)) + geom_col(alpha=0.8,aes(fill=sektor))  + geom_line(data = pom2,aes(x=datum,y=dbdp),size=1.5) + facet_wrap(~regija) + boje_fill + labs(x="",y="postotni bodovi",title = "Gospodarski rast najvećim dijelom generira osobna potrošnja",subtitle = "Doprinosi pojedinih djelatnosti realnom rastu bruto domaćeg proizvoda",caption = "Izvor: Eurostat") + scale_y_continuous(breaks = -7:7)
 rm(pom1,pom2)
 
 # 14. Struktura BDP-a proizvodna metoda ####
@@ -181,7 +181,7 @@ ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,si
 # 22. Plaće ####
 pom1 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "place",range = "x2:aa94") %>% mutate(datum=as.Date(datum)) %>% filter(datum<="2019-12-31") %>% select(datum,iznos=Scenarij1)
 pom2 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "place",range = "x2:aa94") %>% mutate(datum=as.Date(datum)) %>% filter(datum>="2019-12-31") %>% gather("scenarij","iznos",-datum) %>%  mutate(izns=round(iznos,0))
-ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Nominalne bruto plaće",subtitle="Desezonirana vrijednost, administrativni izvori",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=0, vjust=0, show.legend = FALSE,labels=comma) +  scale_x_date(breaks = "1 year",labels = date_format("%y"),limits = c(as.Date("2001-01-01"),as.Date("2021-06-01")))
+ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Nominalne bruto plaće",subtitle="Desezonirana vrijednost, administrativni izvori",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=0, vjust=0, show.legend = FALSE,position=position_jitter(height=500)) +  scale_x_date(breaks = "1 year",labels = date_format("%y"),limits = c(as.Date("2001-01-01"),as.Date("2021-06-01")))
 
 # 23. Javne financije ####
 # 1. Prihodi, rashodi i poslovni rezultat
@@ -202,7 +202,7 @@ ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,si
 # 26.Tečaj ####
 pom1 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "tecaj",range = "M2:N82") %>% mutate(datum=as.Date(datum))
 pom2 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "tecaj",range = "M84:P89")%>% gather("scenarij","iznos",-datum) %>% mutate(datum=as.Date(datum)) %>%  mutate(izns=round(iznos,2))
-ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Tečaj EUR/HRK",subtitle="",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=-0.1, vjust=0, show.legend = FALSE) 
+ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Tečaj EUR/HRK",subtitle="",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=-0.1, vjust=0, show.legend = FALSE,position=position_jitter(height=0.1)) 
 # 27. Inflacija i doprinosi ####
 # stope inflacije
 pom1 <- get_eurostat("prc_hicp_manr") %>% filter(coicop %in% c("CP01","CP02","CP03","CP04","CP05","CP06","CP07","CP08","CP09","CP10","CP11","CP12") & geo=="HR" & unit=="RCH_A") %>% mutate(datum = ceiling_date(time,"month")-1) %>% mutate(dobro=case_when(coicop=="CP01"~"Hrana i piće",coicop=="CP02"~"Alkohol i cigarete",coicop=="CP03"~"Odjeća i obuća",coicop=="CP04"~"Voda, struja i goriva",coicop=="CP05"~"Namještaj",coicop=="CP06"~"Zdravlje",coicop=="CP07"~"Prijevoz",coicop=="CP08"~"Komunikacije",coicop=="CP09"~"Rekreacija i kultura",coicop=="CP10"~"Edukacija",coicop=="CP11"~"Restorani i hoteli",coicop=="CP12"~"Ostala dobra")) %>% filter(month(datum)==12 | datum=="2020-03-31") %>% select(datum,dobro,stopa_rasta=values)
@@ -223,7 +223,7 @@ rm(pom1,pom2,pom3,kriza)
 # Slika 28. Inflacija ####
 pom1 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "inflacija",range = "x2:y78") %>% mutate(datum=as.Date(datum))
 pom2 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "inflacija",range = "x80:aa85")%>% gather("scenarij","iznos",-datum) %>% mutate(datum=as.Date(datum)) %>%  mutate(izns=round(iznos,1))
-ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Inflacija",subtitle="godišnja stopa rasta (%)",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=-0.01, vjust=0, show.legend = FALSE) 
+ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Inflacija",subtitle="godišnja stopa rasta (%)",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=-0.01, vjust=0, show.legend = FALSE,position=position_jitter(height=1)) 
 
 # Slika 29. Krediti HH&NFC ####
 pom1 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "krediti",range = "af2:ai105")  %>% mutate(datum=as.Date(datum)) %>% filter(datum<="2020-03-31") %>% select(datum,iznos=Scenarij1)
@@ -233,7 +233,7 @@ ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,si
 # Slika 30. Kamatne stope ####
 pom1 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "kstope",range = "r2:u78")  %>% mutate(datum=as.Date(datum)) %>% filter(datum<="2020-03-31") %>% select(datum,iznos=Scenarij1)
 pom2 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "kstope",range = "r2:u78") %>% mutate(datum=as.Date(datum)) %>% filter(datum>="2020-03-31") %>% gather("scenarij","iznos",-datum) %>%  mutate(izns=round(iznos,1))
-ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Kamatne stope na kredite realnom sektoru",subtitle="Kamatna stopa na stanja dugoročnih kredita banaka sektorima kućanstava i nefinancijskih poduzeća (%)",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=0, vjust=0, show.legend = FALSE) +  scale_x_date(breaks = "1 year",labels = date_format("%y"),limits = c(as.Date("2006-01-01"),as.Date("2021-01-01")))
+ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Kamatne stope na kredite realnom sektoru",subtitle="Kamatna stopa na stanja dugoročnih kredita banaka sektorima kućanstava i nefinancijskih poduzeća (%)",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=0, vjust=0, show.legend = FALSE,position=position_jitter(height=0.5)) +  scale_x_date(breaks = "1 year",labels = date_format("%y"),limits = c(as.Date("2006-01-01"),as.Date("2021-01-01")))
 
 # 31. Nekretnine - indeksi ####
 pom <- read_excel(path = "D:/mbamba/skripte/corona_sim/popratni_podaci/nekretnine.xlsx") %>% gather("regija","indeks",-datum) %>% mutate(datum=as.Date(datum))
@@ -247,7 +247,7 @@ ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,si
 # 33. Prinosi ####
 pom1 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "prinos",range = "am2:ap78") %>% mutate(datum=as.Date(datum)) %>% filter(datum<="2020-03-31") %>% select(datum,iznos=Scenarij1)
 pom2 <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "prinos",range = "am2:ap78")%>% mutate(datum=as.Date(datum)) %>% filter(datum>="2020-03-31") %>% gather("scenarij","iznos",-datum) %>%  mutate(izns=round(iznos,1))
-ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Prinosi na državne obveznice",subtitle="Prinosi do dospijeća na dugoročne obveznice RH (%)",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=0, vjust=0, show.legend = FALSE) 
+ggplot(pom1,aes(x=datum,y=iznos)) + geom_line(size=2) + geom_line(data = pom2,size=2,aes(x=datum,y=iznos,col=scenarij)) + labs(x="",y="",title="Prinosi na državne obveznice",subtitle="Prinosi do dospijeća na dugoročne obveznice RH (%)",caption="Izvor: Hanfa") + boje_col + geom_text(data=subset(pom2, datum == "2020-12-31"),aes(label=izns,col=scenarij),hjust=0, vjust=0, show.legend = FALSE,position=position_jitter(height=0.5)) 
 
 # 34. Dionice ####
 pom <- read_excel("D:/mbamba/skripte/corona_sim/radni.xlsx",sheet = "dionice",range = "p1:q159") %>% mutate(datum=as.Date(datum)) %>% filter(datum>="2019-01-01")
