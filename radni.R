@@ -1,4 +1,4 @@
-library(mFilter)
+#library(mFilter)
 library(tidyverse)
 library(scales)
 library(ggthemes)
@@ -6,6 +6,7 @@ library(extrafont)
 library(eurostat)
 library(lubridate)
 library(readxl)
+library(xlsx)
 
 # Funkcija za kopiranje u excel ####
 skopiraj <- function(x,row.names=FALSE,col.names=TRUE,...) {
@@ -122,3 +123,15 @@ library(jsonlite)
 base_url = "https://mjera-orm.hzz.hr/korisnici-potpore/ozujak-2020/json/"
 hzz_podaci <- fromJSON(base_url)
 hzz_podaci %>% summarise(SupportPaidAmount=sum(SupportPaidAmount),SupportedEmployeeNumber=sum(SupportedEmployeeNumber))
+
+# 9. Traženje korijena za izračun implicitnog prinosa do dospijeća ####
+library(pracma)
+load("Z:/DSR/DWH/NAV.Rda")
+pom <- nav %>% filter(vrsta1 %in% c("UCITS","Obavezan","Dobrovoljan") & razina2=="Dugoročni dužnički vrijednosni papiri" & datum=="2020-04-30") %>% select(subjekt,razina3,drzava,valuta,protustrana,isin,vrednovanje,dospijece,kamata,nominala_u_valuti,kamata_u_valuti,jed_cijena_u_valuti,tecaj,iznos)
+write.xlsx2(pom,file="bla.xlsx")
+pom1 <- pom[1,]
+pom1$kamata <- 0.05875
+pom1$preostalo_dospijece <- as.numeric((as.Date(pom1$dospijece) - as.Date("2020-04-30"))/365)
+#pom1$cijena <- pom1$nominala_u_valuti*pom1$jed_cijena_u_valuti*pom1$tecaj
+pom1 <- pom1 %>% mutate(cijena=nominala_u_valuti*jed_cijena_u_valuti*tecaj)
+bisect(function(r) (pom1$nominala_u_valuti*pom1$tecaj)/((1+r/2)^(2*pom1$preostalo_dospijece)) + ((pom1$kamata*pom1$nominala_u_valuti*pom1$tecaj/2)/(r/2))*(1-(1/((1+r/2)^(2*pom1$preostalo_dospijece)))) - pom1$cijena, 0.000001, 1)
