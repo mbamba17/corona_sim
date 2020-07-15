@@ -27,11 +27,18 @@ load("Z:/DSR/DWH/NAV.Rda")
 
 ######## A. Stresiranje obvezničkog portfelja ########
 
+# Popis obveznica - input za bloomberg
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Corporate bonds","Government bonds") & !is.na(iznos)) %>% select(isin) %>% distinct()
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dugoročni dužnički vrijednosni papiri") %>% select(isin) %>% distinct()
+pom <- rbind(pom1,pom2) %>% distinct()
+xlsx::write.xlsx2(pom,file = "popis_obveznica.xlsx",append = T)
+rm(pom1,pom2,pom)
+
 # 2. Izračun prinosa - osiguranja ####
 pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Corporate bonds","Government bonds") & !is.na(iznos)) %>% select(datum,vrsta1=portfelj,subjekt,razina1,protustrana,iznos,isin,drzava,valuta,vrednovanje,dospijece,nominala,kamata,jed_cijena) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1=case_when(razina1=="Corporate bonds"~"Korporativne",razina1=="Government bonds"~"Državne"),jed_cijena=ifelse(is.na(jed_cijena),iznos/(nominala+kamata),jed_cijena))
 # spajanje s podacima s bloomberga
 temp <- read_excel("obveznice.xlsx",sheet = "vrijednosti",skip = 1,na = c("#N/A Field Not Applicable","#N/A Invalid Security")) %>% select(isin,kupon=CPN,frekvencija=CPN_FREQ,datum_izdanja=SECURITY_PRICING_DATE,datum_dospijeca=MATURITY,kolicina_izdanje=AMT_ISSUED) %>% mutate(datum_izdanja=as.Date(datum_izdanja,"%d.%m.%Y."),datum_dospijeca=as.Date(datum_dospijeca,"%d.%m.%Y."),kupon=as.numeric(kupon)) %>% filter(!is.na(kupon)) %>% mutate(frekvencija=ifelse(is.na(frekvencija),2,frekvencija))
-pom1 <- pom1 %>% inner_join(temp,by="isin") %>% mutate(dospijece=case_when(is.na(dospijece)~datum_dospijeca,T~dospijece)) %>% select(-datum_dospijeca)
+pom1 <- pom1 %>% left_join(temp,by="isin") %>% mutate(dospijece=case_when(is.na(dospijece)~datum_dospijeca,T~dospijece)) %>% select(-datum_dospijeca)
 
 # Izračun prinosa
 pom <- pom1 %>% mutate(T=(dospijece-datum)/365,M=nominala,n=frekvencija,P=jed_cijena*M,C=(kupon/100)*M/n,T=as.numeric(T),ytm=NA)
@@ -73,7 +80,7 @@ pom1 <- pom
 # 3. Izračun prinosa - fondovi ####
 pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dugoročni dužnički vrijednosni papiri") %>% select(datum,vrsta0,vrsta1,vrsta2=vrsta4,subjekt,razina1=razina3,protustrana,iznos,isin,drzava,valuta,vrednovanje,dospijece,nominala_u_valuti,kamata_u_valuti,jed_cijena_u_valuti,tecaj) %>% mutate(razina1=case_when(razina1=="Korporativne"~"Korporativne",razina1 %in% c("Državne, središnjih banaka i javnih međunarodnih tijela","Municipalne","Državne, središnjih banaka i međunarodnih organizacija")~"Državne"))
 temp <- read_excel("obveznice.xlsx",sheet = "vrijednosti",skip = 1,na = c("#N/A Field Not Applicable","#N/A Invalid Security")) %>% select(isin,kupon=CPN,frekvencija=CPN_FREQ,datum_izdanja=SECURITY_PRICING_DATE,datum_dospijeca=MATURITY,kolicina_izdanje=AMT_ISSUED) %>% mutate(datum_izdanja=as.Date(datum_izdanja,"%d.%m.%Y."),datum_dospijeca=as.Date(datum_dospijeca,"%d.%m.%Y."),kupon=as.numeric(kupon)) %>% filter(!is.na(kupon)) %>% mutate(frekvencija=ifelse(is.na(frekvencija),2,frekvencija))
-pom2 <- pom2 %>% inner_join(temp,by="isin") %>% mutate(dospijece=datum_dospijeca) %>% select(-datum_dospijeca)
+pom2 <- pom2 %>% left_join(temp,by="isin") %>% mutate(dospijece=datum_dospijeca) %>% select(-datum_dospijeca)
 
 # Izračun prinosa
 pom <- pom2 %>% mutate(T=(dospijece-datum)/365,M=nominala_u_valuti,n=frekvencija,P=jed_cijena_u_valuti,C=(kupon/100)*M/n) %>% mutate(T=as.numeric(T),ytm=NA,P=P*M)
@@ -119,7 +126,7 @@ pom2 <- pom2 %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,razina1,protustrana,i
 obveznice <- rbind(pom1,pom2)
 # brisanje privremenih objekata iz workspacea
 rm(pom1,pom2,temp,i,f_cijena,procjena)
-#bla <- obveznice %>% rowid_to_column() %>% filter(is.na(ytm))
+
 
 
 # 4. Analiza uzorka ####
@@ -145,11 +152,41 @@ rm(pom1,pom2,pom3)
 
 #yld_sok <- read_excel(path = "radni.xlsx",sheet = "prinos",range = "j82:k85") %>% mutate(datum=as.Date(datum))
 yld_sok <- 0.01
-pom1 <- obveznice %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski") & datum=="2020-06-30")) %>% mutate(dospijece=if_else(dospijece<="2020-12-31",make_date(2021,1,31),dospijece),rocnost=as.numeric((dospijece-datum)/365),M=nominala,n=frekvencija,P=jed_cijena*M,C=(kupon/100)*M/n) %>% mutate(datum="2020-12-31",ytm=ifelse(drzava=="HR",ytm+yld_sok,ytm),P1=ifelse(is.na(rocnost),C*n/ytm,C/(ytm/n)*(1-1/((1+ytm/n)^(n*rocnost))) + M/((1+ytm/n)^(n*rocnost))),iznos=ifelse(drzava=="HR",ifelse(is.na(tecaj),P1+C,(P1+C)*tecaj),iznos)) %>% select(-rocnost,-M,-n,-P,-P1,-C)
-obveznice <- rbind(obveznice,pom1)
-pom <- obveznice %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom1 <- obveznice %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski") & datum=="2020-06-30")) %>% mutate(dospijece=if_else(dospijece<="2020-12-31",make_date(2021,1,31),dospijece),rocnost=as.numeric((dospijece-datum)/365),M=nominala,n=frekvencija,P=jed_cijena*M,C=(kupon/100)*M/n) %>% mutate(datum="2020-12-31",ytm=ifelse(drzava=="HR",ytm+yld_sok,ytm),P1=ifelse(is.na(rocnost),C*n/ytm,C/(ytm/n)*(1-1/((1+ytm/n)^(n*rocnost))) + M/((1+ytm/n)^(n*rocnost))),iznos=ifelse(is.na(ytm),iznos,ifelse(drzava=="HR",ifelse(is.na(tecaj),P1+C,(P1+C)*tecaj),iznos))) %>% select(-rocnost,-M,-n,-P,-P1,-C)
+temp <- rbind(obveznice,pom1)
+pom <- temp %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
 ggplot(pom,aes(x=datum,y=iznos)) + geom_line(size=1.1) + facet_wrap(~vrsta0,scales = "free") + scale_y_continuous(labels = scales::comma)
 rm(pom1)
 
 # 6. Simulacija vrijednosti dionica ####
 
+# Popis (svih) dionica - input za bloomberg
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Equity") %>% select(isin) %>% distinct()
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dionice") %>% select(isin) %>% distinct()
+pom <- rbind(pom1,pom2) %>% distinct()
+xlsx::write.xlsx2(pom,file = "popis_dionica.xlsx",append = T,sheetName = "ukupno")
+# Popis dionica samo na zadnji datum - input za bloomberg
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Equity" & datum=="2020-03-31") %>% select(isin) %>% distinct()
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dionice" & datum=="2020-06-30") %>% select(isin) %>% distinct()
+pom <- rbind(pom1,pom2) %>% distinct()
+xlsx::write.xlsx2(pom,file = "popis_dionica.xlsx",append = T,sheetName = "zadnji_datum")
+
+
+# Simulacija 
+
+kvantil <- 0.1 # Value at risk koji ciljamo u scenariju
+
+# priprema podataka
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Equity") %>% select(datum,vrsta1=portfelj,subjekt,razina1,protustrana,iznos,isin,drzava,valuta,vrednovanje) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1="Dionice")
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dionice") %>% select(datum,vrsta0,vrsta1,vrsta2=vrsta4,subjekt,razina1=razina3,protustrana,iznos,isin,drzava,valuta,vrednovanje)
+# Izračun value at riska - na podacima s bloomberga
+temp <- read_excel("dionice_zadnji_datum.xlsx",sheet = "vrijednosti_mjesecni",skip = 5,na = c("#N/A N/A","#N/A Invalid Security")) %>% gather(key = "isin",value = "cijena",-datum) %>% mutate(datum=as.Date(datum)) %>% na.omit() %>% arrange(datum) %>% group_by(isin) %>% mutate(povrat=cijena/lag(cijena,6)-1)
+pom3 <- temp %>% group_by(isin) %>% summarise(var=quantile(povrat,kvantil,na.rm=T))
+# spajanje i izračun
+dionice <- rbind(pom1,pom2)
+pom4 <- dionice %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30")) %>% left_join(pom3,by="isin") %>% mutate(datum=as.Date("2020-12-31"),iznos=ifelse(is.na(var),iznos,iznos*(1+var))) %>% select(-var)
+dionice <- rbind(dionice,pom4)
+pom <- dionice %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
+ggplot(pom,aes(x=datum,y=iznos)) + geom_line(size=1.1) + facet_wrap(~vrsta0,scales = "free") + scale_y_continuous(labels = scales::comma)
+rm(pom1,pom2,pom3,pom4,temp,kvantil)
+skopiraj(pom)
