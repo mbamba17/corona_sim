@@ -25,6 +25,38 @@ reg = data.frame(geo=c("AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","E
 load("Z:/DSR/DWH/imovina_S2.Rda")
 load("Z:/DSR/DWH/NAV.Rda")
 
+# 2. Prikaz udjela raznih klasa imovine ####
+# Udio dionica i obveznica u portfelju osiguranja i fondova
+pom11 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Equity","Corporate bonds","Government bonds")) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom12 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo") %>% group_by(datum) %>% summarise(ukupno=sum(iznos,na.rm=T))
+pom1 <- left_join(pom11,pom12,by="datum") %>% mutate(vrsta0="Osiguranja",udio=iznos/ukupno*100)
+pom21 <- nav %>% filter(izvjestaj=="NAV" & razina2 %in% c("Dionice","Dugoročni dužnički vrijednosni papiri")) %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom22 <- nav %>% filter(izvjestaj=="NAV") %>% group_by(datum,vrsta0) %>% summarise(ukupno=sum(iznos,na.rm=T))
+pom2 <- left_join(pom21,pom22,by=c("datum","vrsta0")) %>% mutate(udio=iznos/ukupno*100)
+pom <- rbind(pom1,pom2)
+ggplot(pom,aes(x=datum,y=udio,fill=vrsta0)) + geom_col() + facet_wrap(~vrsta0) + boje_fill
+
+# Udio investicijskih fondova u portfelju osiguranja i fondova
+pom11 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Investment Funds")) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom12 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo") %>% group_by(datum) %>% summarise(ukupno=sum(iznos,na.rm=T))
+pom1 <- left_join(pom11,pom12,by="datum") %>% mutate(vrsta0="Osiguranja",udio=iznos/ukupno*100)
+pom21 <- nav %>% filter(izvjestaj=="NAV" & razina2 %in% c("Investicijski fondovi")) %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom22 <- nav %>% filter(izvjestaj=="NAV") %>% group_by(datum,vrsta0) %>% summarise(ukupno=sum(iznos,na.rm=T))
+pom2 <- left_join(pom21,pom22,by=c("datum","vrsta0")) %>% mutate(udio=iznos/ukupno*100)
+pom <- rbind(pom1,pom2)
+ggplot(pom,aes(x=datum,y=udio,fill=vrsta0)) + geom_col() + facet_wrap(~vrsta0) + boje_fill
+
+# Udio nekretnina i kredita u portfelju osiguranja i fondova
+pom11 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Property","Mortgages and loans")) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom12 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo") %>% group_by(datum) %>% summarise(ukupno=sum(iznos,na.rm=T))
+pom1 <- left_join(pom11,pom12,by="datum") %>% mutate(vrsta0="Osiguranja",udio=iznos/ukupno*100)
+pom21 <- nav %>% filter(izvjestaj=="NAV" & razina2 %in% c("Nekretnine")) %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom22 <- nav %>% filter(izvjestaj=="NAV") %>% group_by(datum,vrsta0) %>% summarise(ukupno=sum(iznos,na.rm=T))
+pom2 <- left_join(pom21,pom22,by=c("datum","vrsta0")) %>% mutate(udio=iznos/ukupno*100)
+pom <- rbind(pom1,pom2)
+ggplot(pom,aes(x=datum,y=udio,fill=vrsta0)) + geom_col() + facet_wrap(~vrsta0) + boje_fill
+rm(pom11,pom12,pom1,pom21,pom22,pom2)
+
 ######## A. Stresiranje obvezničkog portfelja ########
 
 # Popis obveznica - input za bloomberg
