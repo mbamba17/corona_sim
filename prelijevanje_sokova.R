@@ -26,15 +26,27 @@ load("Z:/DSR/DWH/imovina_S2.Rda")
 load("Z:/DSR/DWH/NAV.Rda")
 
 # 2. Prikaz udjela raznih klasa imovine ####
+
+# Struktura ulaganja - IF
+pom <- nav %>% filter(izvjestaj=="NAV" & vrsta0=="Investicijski") %>% group_by(datum,razina2) %>% summarise(iznos=sum(iznos,na.rm=T))
+ggplot(pom,aes(x=datum,y=iznos,fill=razina2)) + geom_col(position="fill") + boje_fill
+# Struktura ulaganja - MF
+pom <- nav %>% filter(izvjestaj=="NAV" & vrsta0=="Mirovinski") %>% group_by(datum,razina2) %>% summarise(iznos=sum(iznos,na.rm=T))
+ggplot(pom,aes(x=datum,y=iznos,fill=razina2)) + geom_col(position="fill") + boje_fill
+# Struktura ulaganja - OS
+pom <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo") %>% group_by(datum,razina1) %>% summarise(iznos=sum(iznos,na.rm=T))
+ggplot(pom,aes(x=datum,y=iznos,fill=razina1)) + geom_col(position="fill") + boje_fill
+
 # Udio dionica i obveznica u portfelju osiguranja i fondova
-pom11 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Equity","Corporate bonds","Government bonds")) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom11 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Equity","Corporate bonds","Government bonds")) %>% mutate(razina1=case_when(razina1=="Equity"~"Dionice",T~"Obveznice")) %>% group_by(datum,razina1) %>% summarise(iznos=sum(iznos,na.rm=T))
 pom12 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo") %>% group_by(datum) %>% summarise(ukupno=sum(iznos,na.rm=T))
 pom1 <- left_join(pom11,pom12,by="datum") %>% mutate(vrsta0="Osiguranja",udio=iznos/ukupno*100)
-pom21 <- nav %>% filter(izvjestaj=="NAV" & razina2 %in% c("Dionice","Dugoročni dužnički vrijednosni papiri")) %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom21 <- nav %>% filter(izvjestaj=="NAV" & razina2 %in% c("Dionice","Dugoročni dužnički vrijednosni papiri")) %>% mutate(razina1=case_when(razina2=="Dionice"~"Dionice",T~"Obveznice")) %>% group_by(datum,razina1,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
 pom22 <- nav %>% filter(izvjestaj=="NAV") %>% group_by(datum,vrsta0) %>% summarise(ukupno=sum(iznos,na.rm=T))
 pom2 <- left_join(pom21,pom22,by=c("datum","vrsta0")) %>% mutate(udio=iznos/ukupno*100)
 pom <- rbind(pom1,pom2)
-ggplot(pom,aes(x=datum,y=udio,fill=vrsta0)) + geom_col() + facet_wrap(~vrsta0) + boje_fill
+ggplot(pom,aes(x=datum,y=udio,fill=razina1)) + geom_col() + facet_wrap(~vrsta0) + boje_fill
+# pom <- pom %>% filter(datum=="2020-03-31" | datum=="2020-06-30") %>% select(datum,vrsta0,razina1,udio) %>% spread(vrsta0,udio)
 
 # Udio investicijskih fondova u portfelju osiguranja i fondova
 pom11 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Investment Funds")) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T))
@@ -45,6 +57,7 @@ pom22 <- nav %>% filter(izvjestaj=="NAV") %>% group_by(datum,vrsta0) %>% summari
 pom2 <- left_join(pom21,pom22,by=c("datum","vrsta0")) %>% mutate(udio=iznos/ukupno*100)
 pom <- rbind(pom1,pom2)
 ggplot(pom,aes(x=datum,y=udio,fill=vrsta0)) + geom_col() + facet_wrap(~vrsta0) + boje_fill
+# pom <- pom %>% filter(datum=="2020-03-31" | datum=="2020-06-30") %>% select(datum,vrsta0,udio) %>% spread(vrsta0,udio)
 
 # Udio nekretnina i kredita u portfelju osiguranja i fondova
 pom11 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Property","Mortgages and loans")) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T))
@@ -203,6 +216,13 @@ pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dionice" & datum=="2020-06-3
 pom <- rbind(pom1,pom2) %>% distinct()
 xlsx::write.xlsx2(pom,file = "popis_dionica.xlsx",append = T,sheetName = "zadnji_datum")
 
+# pokrivenost simuliranih dionica u uzorku
+pom1 <- obveznice %>% filter(!is.na(ytm)) %>% group_by(datum,vrsta0) %>% summarise(uzorak=sum(iznos,na.rm = T))
+pom2 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Corporate bonds","Government bonds") & !is.na(iznos)) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% mutate(vrsta0="Osiguranja")
+pom3 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dugoročni dužnički vrijednosni papiri") %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm = T))
+pom <- full_join(pom1,rbind(pom2,pom3),by=c("datum","vrsta0")) %>% mutate(udio=uzorak/iznos*100)
+ggplot(pom,aes(x=datum,y=udio,col=vrsta0)) + geom_line()
+rm(pom1,pom2,pom3)
 
 # Simulacija 
 
@@ -216,9 +236,73 @@ temp <- read_excel("dionice_zadnji_datum.xlsx",sheet = "vrijednosti_mjesecni",sk
 pom3 <- temp %>% group_by(isin) %>% summarise(var=quantile(povrat,kvantil,na.rm=T))
 # spajanje i izračun
 dionice <- rbind(pom1,pom2)
-pom4 <- dionice %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30")) %>% left_join(pom3,by="isin") %>% mutate(datum=as.Date("2020-12-31"),iznos=ifelse(is.na(var),iznos,iznos*(1+var))) %>% select(-var)
+pom4 <- dionice %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30")) %>% left_join(pom3,by="isin") %>% mutate(datum=as.Date("2020-12-31"),iznos=ifelse(is.na(var),iznos,iznos*(1+var)))
+pom5 <- pom4 %>% group_by(subjekt,vrsta1) %>% summarise(var_skupni=weighted.mean(x = var,w = iznos,na.rm=T)) %>% na.omit()
+pom4 <- pom4 %>% left_join(pom5,by=c("vrsta1","subjekt")) %>% mutate(var=ifelse(is.na(var),var_skupni,var)) %>% select(-var,-var_skupni)
 dionice <- rbind(dionice,pom4)
 pom <- dionice %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
 ggplot(pom,aes(x=datum,y=iznos)) + geom_line(size=1.1) + facet_wrap(~vrsta0,scales = "free") + scale_y_continuous(labels = scales::comma)
 rm(pom1,pom2,pom3,pom4,temp,kvantil)
 skopiraj(pom)
+
+# pokrivenost simuliranih dionica u uzorku
+temp <- read_excel("dionice_zadnji_datum.xlsx",sheet = "vrijednosti_mjesecni",skip = 5,na = c("#N/A N/A","#N/A Invalid Security")) %>% gather(key = "isin",value = "cijena",-datum) %>% mutate(datum=as.Date(datum)) %>% na.omit() %>% arrange(datum) %>% group_by(isin) %>% mutate(povrat=cijena/lag(cijena,6)-1) %>% group_by(isin) %>% summarise(var=quantile(povrat,0.1,na.rm=T))
+temp <- left_join(dionice,temp,by="isin") %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30"))
+pom1 <- temp %>% filter(!is.na(var)) %>% group_by(datum,vrsta0) %>% summarise(uzorak=sum(iznos,na.rm = T))
+pom2 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Equity") & !is.na(iznos)) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% mutate(vrsta0="Osiguranja")
+pom3 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dionice") %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm = T))
+pom <- inner_join(pom1,rbind(pom2,pom3),by=c("datum","vrsta0")) %>% mutate(udio=uzorak/iznos*100)
+ggplot(pom,aes(x=vrsta0,y=udio,fill=vrsta0)) + geom_col()
+rm(temp,pom1,pom2,pom3) # kod osiguranja fali dosta dionica, pa treba razmisliti što s njima
+
+# 7. Simulacija vrijednosti investicijskih fondova ####
+
+# Popis (svih) investicijskih fondova - input za bloomberg
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Investment Funds") %>% select(isin) %>% distinct()
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Investicijski fondovi") %>% select(isin) %>% distinct()
+pom <- rbind(pom1,pom2) %>% distinct()
+xlsx::write.xlsx2(pom,file = "popis_ifondova.xlsx",append = T,sheetName = "ukupno")
+# Popis investicijskih fondova samo na zadnji datum - input za bloomberg
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Investment Funds" & datum=="2020-03-31") %>% select(isin) %>% distinct()
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Investicijski fondovi" & datum=="2020-06-30") %>% select(isin) %>% distinct()
+pom <- rbind(pom1,pom2) %>% distinct()
+xlsx::write.xlsx2(pom,file = "popis_ifondova.xlsx",append = T,sheetName = "zadnji_datum")
+# udio domaćih fondova
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Investment Funds") %>% mutate(rezidentnost=ifelse(drzava=="HR","Domaći","Strani")) %>% group_by(datum,rezidentnost) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% mutate(vrsta0="Osiguranja")
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Investicijski fondovi") %>% mutate(rezidentnost=ifelse(drzava=="HR","Domaći","Strani")) %>% group_by(datum,vrsta0,rezidentnost) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom <- rbind(pom1,pom2)
+ggplot(pom,aes(x=datum,y=iznos,fill=rezidentnost)) + geom_col(position="fill") + facet_wrap(~vrsta0,scales="free") + boje_fill
+rm(pom1,pom2)
+# pokrivenost simuliranih investicijskih fondova u uzorku
+temp <- read_excel("ifondovi_zadnji_datum.xlsx",sheet = "vrijednosti_mjesecni",skip = 5,na = c("#N/A N/A","#N/A Invalid Security")) %>% gather(key = "isin",value = "cijena",-datum) %>% mutate(datum=as.Date(datum)) %>% na.omit() %>% arrange(datum) %>% group_by(isin) %>% mutate(povrat=cijena/lag(cijena,6)-1) %>% group_by(isin) %>% summarise(var=quantile(povrat,0.1,na.rm=T))
+temp <- left_join(ifondovi,temp,by="isin") %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30"))
+pom1 <- temp %>% filter(!is.na(var)) %>% group_by(datum,vrsta0) %>% summarise(uzorak=sum(iznos,na.rm = T))
+pom2 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Investment Funds") & !is.na(iznos)) %>% group_by(datum) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% mutate(vrsta0="Osiguranja")
+pom3 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Investicijski fondovi") %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm = T))
+pom <- inner_join(pom1,rbind(pom2,pom3),by=c("datum","vrsta0")) %>% mutate(udio=uzorak/iznos*100)
+ggplot(pom,aes(x=vrsta0,y=udio,fill=vrsta0)) + geom_col()
+rm(temp,pom1,pom2,pom3) # kod osiguranja fali IF-ova, pa treba razmisliti što s njima
+
+
+# Simulacija #####
+
+kvantil <- 0.1 # Value at risk koji ciljamo u scenariju
+
+# priprema podataka
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Investment Funds") %>% select(datum,vrsta1=portfelj,subjekt,razina1=razina2,protustrana,iznos,isin,drzava,valuta,vrednovanje) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1="Investicijski fondovi")
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Investicijski fondovi") %>% select(datum,vrsta0,vrsta1,vrsta2=vrsta4,subjekt,razina1=razina3,protustrana,iznos,isin,drzava,valuta,vrednovanje)
+# Izračun value at riska - na podacima s bloomberga
+temp <- read_excel("ifondovi_zadnji_datum.xlsx",sheet = "vrijednosti_mjesecni",skip = 5,na = c("#N/A N/A","#N/A Invalid Security")) %>% gather(key = "isin",value = "cijena",-datum) %>% mutate(datum=as.Date(datum)) %>% na.omit() %>% arrange(datum) %>% group_by(isin) %>% mutate(povrat=cijena/lag(cijena,6)-1)
+pom3 <- temp %>% group_by(isin) %>% summarise(var=quantile(povrat,kvantil,na.rm=T))
+# spajanje i izračun
+ifondovi <- rbind(pom1,pom2)
+pom4 <- ifondovi %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30")) %>% left_join(pom3,by="isin") %>% mutate(datum=as.Date("2020-12-31"),iznos=ifelse(is.na(var),iznos,iznos*(1+var))) 
+# za one fondove za koje nismo našli podatke simulirati ćemo prosječni pad od tog društva 
+pom5 <- pom4 %>% group_by(subjekt,vrsta1) %>% summarise(var_skupni=weighted.mean(x = var,w = iznos,na.rm=T)) %>% na.omit()
+pom4 <- pom4 %>% left_join(pom5,by=c("vrsta1","subjekt")) %>% mutate(var=ifelse(is.na(var),var_skupni,var)) %>% select(-var,-var_skupni)
+ifondovi <- rbind(ifondovi,pom4)
+pom <- ifondovi %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
+ggplot(pom,aes(x=datum,y=iznos)) + geom_line(size=1.1) + facet_wrap(~vrsta0,scales = "free") + scale_y_continuous(labels = scales::comma)
+rm(pom1,pom2,pom3,pom4,temp,kvantil)
+skopiraj(pom)
+
