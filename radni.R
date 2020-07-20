@@ -135,3 +135,24 @@ pom1$preostalo_dospijece <- as.numeric((as.Date(pom1$dospijece) - as.Date("2020-
 #pom1$cijena <- pom1$nominala_u_valuti*pom1$jed_cijena_u_valuti*pom1$tecaj
 pom1 <- pom1 %>% mutate(cijena=nominala_u_valuti*jed_cijena_u_valuti*tecaj)
 bisect(function(r) (pom1$nominala_u_valuti*pom1$tecaj)/((1+r/2)^(2*pom1$preostalo_dospijece)) + ((pom1$kamata*pom1$nominala_u_valuti*pom1$tecaj/2)/(r/2))*(1-(1/((1+r/2)^(2*pom1$preostalo_dospijece)))) - pom1$cijena, 0.000001, 1)
+
+# Dionice
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Equity") %>% select(datum,vrsta1=portfelj,subjekt,razina1,protustrana,iznos,isin,drzava,valuta,vrednovanje) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1="Dionice")
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Dionice") %>% select(datum,vrsta0,vrsta1,vrsta2=vrsta4,subjekt,razina1=razina3,protustrana,iznos,isin,drzava,valuta,vrednovanje)
+# Izračun value at riska - na podacima s bloomberga
+temp <- read_excel("dionice_zadnji_datum.xlsx",sheet = "vrijednosti_mjesecni",skip = 5,na = c("#N/A N/A","#N/A Invalid Security")) %>% gather(key = "isin",value = "cijena",-datum) %>% mutate(datum=as.Date(datum)) %>% na.omit() %>% arrange(datum) %>% group_by(isin) %>% mutate(povrat=cijena/lag(cijena,1)-1) %>% group_by(isin) %>% summarise(var=quantile(povrat,kvantil_dionice,na.rm=T))
+# spajanje i izračun
+dionice <- rbind(pom1,pom2)
+pom3 <- dionice %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30")) %>% left_join(temp,by="isin") %>% mutate(datum=as.Date("2020-12-31"))
+pom4 <- pom3 %>% group_by(subjekt,vrsta1) %>% summarise(var_skupni=weighted.mean(x = var,w = iznos,na.rm=T)) %>% na.omit() %>% mutate()
+pom4 <- left_join(pom3,pom4,by=c("vrsta1","subjekt")) %>% mutate(var=ifelse(is.na(var),var_skupni,var),iznos=ifelse(is.na(var),iznos,iznos*(1+var)))
+# crtanje
+pom <- pom4 %>% group_by(vrsta0,drzava,var) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% distinct() %>% mutate(drzava=ifelse(drzava %in% c("HR","US"),drzava,ifelse(drzava %in% reg$geo,"EU","OST")))
+ggplot(pom,aes(x=1,y=var,col=drzava)) + geom_jitter(alpha=0.6,aes(size=iznos)) + facet_wrap(~vrsta0,scales = "free_x") + boje_col  + scale_y_continuous(labels = percent) + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) + labs(x="",y="",caption="Napomena: Veličina točke označuje simuliranu veličinu fonda, odnosno društva za osiguranje na kraju 2020.\nIzvor: Hanfa",subtitle = "Relativna promjena vrijednosti imovine, u %", title = "Slika XX. Izražena divergencija rezultata unutar pojedinih industrija") + scale_size_continuous(range = c(2, 10))
+rm(pom1,pom2,pom3,pom4)
+
+# Usporedba investicijskih i mirovinskih fondova u ožujku 2020.
+pom <- nav_opce %>% filter(izvjestaj=="NAV" & vrsta0!="Poseban" & (datum=="2020-01-31" | datum=="2020-03-31")) %>% select(datum,vrsta0,subjekt,cj_udjela_u_valuti,nav) %>% arrange(datum) %>% group_by(vrsta0,subjekt) %>% mutate(prinos=cj_udjela_u_valuti/lag(cj_udjela_u_valuti)-1) %>% na.omit()
+ggplot(pom %>% filter(subjekt!="InterCapital Short Term Bond (HRVBINUVBCA6)"),aes(x=1,y=prinos,col=vrsta0)) + geom_jitter(alpha=0.6,aes(size=nav)) + facet_wrap(~vrsta0,scales = "free_x") + boje_col  + scale_y_continuous(labels = percent) + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
+
+pom <- nav_opce %>% filter(izvjestaj=="NAV" & vrsta0!="Poseban" & (datum=="2020-01-31" | datum=="2020-03-31")) %>% select(datum,vrsta0,vrsta1,vrsta2,vrsta4,subjekt,cj_udjela_u_valuti,nav) %>% arrange(datum) %>% group_by(vrsta0,subjekt) %>% mutate(prinos=cj_udjela_u_valuti/lag(cj_udjela_u_valuti)-1) %>% group_by(vrsta0,vrsta1,vrsta2,vrsta4) %>% summarise(prinos=weighted.mean(prinos,w = nav,na.rm = T))
