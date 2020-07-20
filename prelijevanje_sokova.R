@@ -22,7 +22,8 @@ boje_col <- scale_color_manual(values = c("#155e63","#e84545","#25a55f","#ffc93c
 reg = data.frame(geo=c("AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","EL","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE","UK"),ctry=c("AUT","BEL","BLG","HRV","CYP","CZE","DNK","EST","FIN","FRA","DEU","GRC","HUN","IRL","ITA","LVA","LTU","LUX","MLT","NLD","POL","PRT","ROU","SVK","SVN","ESP","SWE","GBR"),country=c("Austria","Belgium","Bulgaria","Croatia","Cyprus","Czech Rep.","Denmark","Estonia","Finland","France","Germany","Greece","Hungary","Ireland","Italy","Latvia","Lithuania","Luxembourg","Malta","Netherlands","Poland","Portugal","Romania","Slovakia","Slovenia","Spain","Sweden","United Kingdom"),regija=c("Ostale zemlje EU","Ostale zemlje EU","Zemlje SIE","HR","Ostale zemlje EU","Zemlje SIE","Ostale zemlje EU","Zemlje SIE","Ostale zemlje EU","Ostale zemlje EU","Ostale zemlje EU","Ostale zemlje EU","Zemlje SIE","Ostale zemlje EU","Ostale zemlje EU","Zemlje SIE","Zemlje SIE","Ostale zemlje EU","Ostale zemlje EU","Ostale zemlje EU","Zemlje SIE","Ostale zemlje EU","Zemlje SIE","Zemlje SIE","Zemlje SIE","Ostale zemlje EU","Ostale zemlje EU","Ostale zemlje EU"))
 
 # 1. Učitavanje podataka ####
-
+load("Z:/DSR/DWH/nav_opce.Rda")
+nav_opce <- nav
 load("Z:/DSR/DWH/imovina_S2.Rda")
 load("Z:/DSR/DWH/NAV.Rda")
 
@@ -73,23 +74,23 @@ rm(pom11,pom12,pom1,pom21,pom22,pom2)
 
 # 3. Inputi - kalibracija scenarija ####
 
-# 3.1. Neto uplate u mirovinske fondove
+# 3.1. Neto uplate u mirovinske fondove ( u posljednjih 6 mjeseci 2020.)
 doprinosi_omf <- 2994982831.33
 doprinosi_dmf <- 213532281.91
 
 # 3.2. OBVEZNICE - rast prinosa do kraja godine
 yld_sok <- 0.01
 
-# 3.3. DIONICE - razina VaR-a koju uzimamo za svaku pojedinu dionicu
+# 3.3. DIONICE - razina 6-mjesečnog VaR-a koju uzimamo za svaku pojedinu dionicu
 kvantil_dionice <- 0.1
 
-# 3.4. INVESTICIJSKI FONDOVI - razina VaR-a koji uzimamo za svaki pojedini fond
+# 3.4. INVESTICIJSKI FONDOVI - razina 6-mjesečnog VaR-a koji uzimamo za svaki pojedini fond
 kvantil_ifondovi <- 0.1
 
 # 3.5. NEKRETNINE - promjena cijena na godišnjoj razini
 delta_nekret <- -0.115
 
-# 3.6. TEČAJ - kvantil polugodišnje promjene tečaja kojeg stresiramo
+# 3.6. TEČAJ - kvantil polugodišnje promjene tečaja kojeg stresiramo (0.1 - aprecijacija, 0.9 - deprecijacija)
 kvantil_tecaj <- 0.9
 
 # 4. Stresiranje obvezničkog portfelja ####
@@ -299,6 +300,7 @@ skopiraj(pom)
 # Simulacija
 
 # priprema podataka
+domaci_fondovi <- (nav_opce %>% filter(vrsta0=="Investicijski" & datum=="2020-06-30") %>% select(isin) %>% distinct() %>% na.omit() %>% filter(isin!="NA"))[,1]
 pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1=="Investment Funds") %>% select(datum,vrsta1=portfelj,subjekt,razina1=razina2,protustrana,iznos,isin,drzava,valuta,vrednovanje) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1="Investicijski fondovi")
 pom2 <- nav %>% filter(izvjestaj=="NAV" & razina2=="Investicijski fondovi") %>% select(datum,vrsta0,vrsta1,vrsta2=vrsta4,subjekt,razina1=razina3,protustrana,iznos,isin,drzava,valuta,vrednovanje)
 # Izračun value at riska - na podacima s bloomberga
@@ -308,7 +310,8 @@ ifondovi <- rbind(pom1,pom2)
 pom3 <- ifondovi %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30")) %>% left_join(temp,by="isin") %>% mutate(datum=as.Date("2020-12-31"))
 # za one fondove za koje nismo našli podatke simulirati ćemo prosječni var od tog društva 
 pom4 <- pom3 %>% group_by(subjekt,vrsta1) %>% summarise(var_skupni=weighted.mean(x = var,w = iznos,na.rm=T)) %>% na.omit()
-pom4 <- left_join(pom3,pom4,by=c("vrsta1","subjekt")) %>% mutate(var=ifelse(is.na(var),var_skupni,var),iznos=ifelse(is.na(var),iznos,iznos*(1+var))) %>% select(-var,-var_skupni)
+# u ovom koraku stresiramo samo strane fondove preko VaR-a, u drugom koraku ćemo stresirati domaće fondove
+pom4 <- left_join(pom3,pom4,by=c("vrsta1","subjekt")) %>% mutate(var=ifelse(is.na(var),var_skupni,var),iznos=ifelse(isin %in% domaci_fondovi,iznos,ifelse(is.na(var),iznos,iznos*(1+var)))) %>% select(-var,-var_skupni)
 ifondovi <- rbind(ifondovi,pom4)
 pom <- ifondovi %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
 ggplot(pom,aes(x=datum,y=iznos)) + geom_line(size=1.1) + facet_wrap(~vrsta0,scales = "free") + scale_y_continuous(labels = scales::comma)
@@ -318,24 +321,53 @@ skopiraj(pom)
 # 7. Cijene nekretnina - osiguranja ####
 
 # nekretnine koje stresiramo
-nekretnine <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Property")) %>% select(datum,vrsta1=portfelj,subjekt,razina2,iznos,drzava,valuta,vrednovanje) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1="Ostala imovina")
+nekretnine <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & razina1 %in% c("Property")) %>% select(datum,vrsta1=portfelj,subjekt,razina2,isin,iznos,drzava,valuta,vrednovanje) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1="Ostala imovina")
 pom1 <- nekretnine %>% filter(datum=="2020-03-31") %>% mutate(datum=as.Date("2020-12-31"),iznos=ifelse( razina2 %in% c("Property (office and commercial)","Property (residential)","Property (under construction)"),(1+delta_nekret)*iznos,iznos))
 nekretnine <- rbind(nekretnine,pom1)
 rm(pom1)
 
 # 8. Spajanje svih dijelova zajedno ####
 # ostala imovina
-pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & !razina1 %in% c("Corporate bonds","Government bonds","Equity","Investment Funds","Property")) %>% select(datum,vrsta1=portfelj,subjekt,razina2,iznos,drzava,valuta,vrednovanje) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1="Ostala imovina")
-pom2 <- nav %>% filter(izvjestaj=="NAV" & razina1=="Imovina" & !razina2 %in% c("Dugoročni dužnički vrijednosni papiri","Dionice","Investicijski fondovi")) %>% select(datum,vrsta0,vrsta1,vrsta2=vrsta4,subjekt,razina2,iznos,drzava,valuta,vrednovanje) %>% mutate(razina1="Ostala imovina")
+pom1 <- imovina_s2 %>% filter(modul=="Quarterly Solvency II reporting Solo" & !razina1 %in% c("Corporate bonds","Government bonds","Equity","Investment Funds","Property")) %>% select(datum,vrsta1=portfelj,subjekt,razina2,isin,iznos,drzava,valuta,vrednovanje) %>% mutate(vrsta0="Osiguranja",vrsta2=NA,vrsta1=case_when(vrsta1=="Non-life [split applicable]"~"Neživot",vrsta1=="Life [split applicable]"~"Život",T~"Ostalo"),razina1="Ostala imovina")
+pom2 <- nav %>% filter(izvjestaj=="NAV" & razina1=="Imovina" & !razina2 %in% c("Dugoročni dužnički vrijednosni papiri","Dionice","Investicijski fondovi")) %>% select(datum,vrsta0,vrsta1,vrsta2=vrsta4,subjekt,razina2,isin,iznos,drzava,valuta,vrednovanje) %>% mutate(razina1="Ostala imovina")
 ostatak <- rbind(pom1,pom2)
 # vrijednost za kraj 2020. - pretpostavka da se ništa ne mijenja
 pom3 <- ostatak %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski","Poseban") & datum=="2020-06-30")) %>% mutate(datum=as.Date("2020-12-31"))
 ostatak <- rbind(ostatak,pom3)
 # sve zajedno
-imovina <- rbind(obveznice %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,drzava,valuta,vrednovanje,iznos) %>% mutate(razina1="Obveznice"),dionice %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,drzava,valuta,vrednovanje,iznos) %>% mutate(razina1="Dionice"), ifondovi %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,drzava,valuta,vrednovanje,iznos) %>% mutate(razina1="Investicijski fondovi"),nekretnine %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,drzava,valuta,vrednovanje,iznos) %>% mutate(razina1="Nekretnine"),ostatak %>% select(-razina2))
+imovina <- rbind(obveznice %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,drzava,valuta,vrednovanje,isin,iznos) %>% mutate(razina1="Obveznice"),dionice %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,drzava,valuta,vrednovanje,isin,iznos) %>% mutate(razina1="Dionice"), ifondovi %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,drzava,valuta,vrednovanje,isin,iznos) %>% mutate(razina1="Investicijski fondovi"),nekretnine %>% select(datum,vrsta0,vrsta1,vrsta2,subjekt,drzava,valuta,vrednovanje,isin,iznos) %>% mutate(razina1="Nekretnine"),ostatak %>% select(-razina2))
 
-# 9. Vrijednost investicijskih fondova - look through approach ####
+# 9. Vrijednost domaćih investicijskih fondova - 2nd round efekti (look through approach) ####
 
+# 1. Runda umanjenja
+
+# izračun pada cijene udjela po fondu
+pom11 <- imovina %>% filter(vrsta0=="Investicijski" & (datum=="2020-06-30" | datum=="2020-12-31")) %>% group_by(datum,subjekt) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom12 <- nav_opce %>% select(subjekt,isin) %>% distinct()
+pom1 <- left_join(pom11,pom12,by=c("subjekt")) %>% na.omit() %>% filter(isin!="NA") %>% spread(datum,iznos) %>% mutate(delta_cj_udjela=`2020-12-31`/`2020-06-30`-1) %>% select(isin,delta_cj_udjela)
+# umanjenje vrijednosti cijene udjela u imovini
+imovina <- imovina %>% left_join(pom1,by="isin") %>% mutate(iznos=ifelse(is.na(delta_cj_udjela),iznos,iznos*(1+delta_cj_udjela))) %>% select(-delta_cj_udjela)
+
+# 2. Runda umanjenja
+
+# izračun pada cijene udjela po fondu
+pom11 <- imovina %>% filter(vrsta0=="Investicijski" & (datum=="2020-06-30" | datum=="2020-12-31")) %>% group_by(datum,subjekt) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom12 <- nav_opce %>% select(subjekt,isin) %>% distinct()
+pom1 <- left_join(pom11,pom12,by=c("subjekt")) %>% na.omit() %>% filter(isin!="NA") %>% spread(datum,iznos) %>% mutate(delta_cj_udjela=`2020-12-31`/`2020-06-30`-1) %>% select(isin,delta_cj_udjela)
+# umanjenje vrijednosti cijene udjela u imovini
+imovina <- imovina %>% left_join(pom1,by="isin") %>% mutate(iznos=ifelse(is.na(delta_cj_udjela),iznos,iznos*(1+delta_cj_udjela))) %>% select(-delta_cj_udjela)
+
+# 3. Runda umanjenja
+
+# izračun pada cijene udjela po fondu
+pom11 <- imovina %>% filter(vrsta0=="Investicijski" & (datum=="2020-06-30" | datum=="2020-12-31")) %>% group_by(datum,subjekt) %>% summarise(iznos=sum(iznos,na.rm=T))
+pom12 <- nav_opce %>% select(subjekt,isin) %>% distinct()
+pom1 <- left_join(pom11,pom12,by=c("subjekt")) %>% na.omit() %>% filter(isin!="NA") %>% spread(datum,iznos) %>% mutate(delta_cj_udjela=`2020-12-31`/`2020-06-30`-1) %>% select(isin,delta_cj_udjela)
+# umanjenje vrijednosti cijene udjela u imovini
+imovina <- imovina %>% left_join(pom1,by="isin") %>% mutate(iznos=ifelse(is.na(delta_cj_udjela),iznos,iznos*(1+delta_cj_udjela))) %>% select(-delta_cj_udjela)
+
+# brisanje pomoćnih dataframeova
+rm(pom11,pom12,pom1)
 
 # 10. Dizanje ulaganja od osiguranja na razinu imovine ####
 pom1 <- (imovina %>% filter(vrsta0=="Osiguranja" & datum=="2020-12-31") %>% summarise(iznos=sum(iznos,na.rm=T)))[1,1] # iznos ulaganja
@@ -361,6 +393,6 @@ pom2 <- pom1 %>% arrange(datum) %>% mutate(dtecaj=HRK/lag(HRK,2)-1) %>% summaris
 imovina <- imovina %>% mutate(iznos=ifelse(datum=="2020-12-31" & (valuta=="EUR" | valuta=="USD"),iznos*pom2,iznos))
 rm(pom1,pom2)
 
-# 13. Bla ###
+# 13. Konačna vrijednost imovine ###
 pom <- imovina %>% group_by(datum,vrsta1) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% spread(vrsta1,iznos)
 skopiraj(pom)
