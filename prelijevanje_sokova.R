@@ -2,6 +2,7 @@ library(tidyverse)
 library(lubridate)
 library(readxl)
 library(scales)
+library(ecb)
 
 # Funkcija za kopiranje u excel ####
 skopiraj <- function(x,row.names=FALSE,col.names=TRUE,...) {
@@ -87,6 +88,9 @@ kvantil_ifondovi <- 0.1
 
 # 3.5. NEKRETNINE - promjena cijena na godišnjoj razini
 delta_nekret <- -0.115
+
+# 3.6. TEČAJ - kvantil polugodišnje promjene tečaja kojeg stresiramo
+kvantil_tecaj <- 0.9
 
 # 4. Stresiranje obvezničkog portfelja ####
 
@@ -349,7 +353,14 @@ rm(pom1)
 
 # 12. Tečaj ####
 
+# Dohvat tečaja sa EUR/HRK (s ECB-a)
+pom1 <- get_data("EXR.Q.HRK+USD.EUR.SP00.E") %>% select(obstime,currency,tecaj=obsvalue) %>% mutate(datum = make_date(ifelse(substr(obstime,7,7)=="4",as.numeric(substr(obstime,1,4))+1,as.numeric(substr(obstime,1,4))), ifelse(substr(obstime,7,7)=="4",1,as.numeric(substr(obstime,7,7))*3+1), 1)-1) %>% select(-obstime) %>% spread(currency,tecaj)
+# dohvaćanje VaR vrijednosti deprecijacije tečaja
+pom2 <- pom1 %>% arrange(datum) %>% mutate(dtecaj=HRK/lag(HRK,2)-1) %>% summarise(fx_var=quantile(dtecaj,probs = kvantil_tecaj,na.rm = T)) %>% as.numeric() + 1
+# izračun
+imovina <- imovina %>% mutate(iznos=ifelse(datum=="2020-12-31" & (valuta=="EUR" | valuta=="USD"),iznos*pom2,iznos))
+rm(pom1,pom2)
 
-
+# 13. Bla ###
 pom <- imovina %>% group_by(datum,vrsta1) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% spread(vrsta1,iznos)
 skopiraj(pom)
