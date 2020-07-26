@@ -71,25 +71,29 @@ rm(pom11,pom12,pom1,pom21,pom22,pom2)
 
 # 3. Inputi - kalibracija scenarija ####
 
+# 3.0. ODABIR SCENARIJA
+
+# scnrj <- "Scenarij1"
+# scnrj <- "Scenarij2"
+ scnrj <- "Scenarij3"
+
+# inputi
+inputi <- data.frame(scenarij=c("Scenarij1","Scenarij2","Scenarij3"),doprinosi_omf = c(2994982831.33,2994982831.33,2994982831.33) , doprinosi_dmf = c(213532281.91,213532281.91,213532281.91) , yld_sok = c(0.0139204,0.0044735,0.0040498) , kvantil_dionice = c(0.025,0.05,0.1) , kvantil_ifondovi = c(0.025,0.05,0.1) , delta_nekret = c(-0.11024,-0.08768,-0.06784) , kvantil_tecaj = c(0.9,0.85,0.8), tecaj_proc=c(7.6908,7.6208,7.5708))
+
 # 3.1. Neto uplate u mirovinske fondove ( u posljednjih 6 mjeseci 2020.)
-doprinosi_omf <- 2994982831.33
-doprinosi_dmf <- 213532281.91
-
+doprinosi_omf <- inputi$doprinosi_omf[inputi$scenarij==scnrj] 
+doprinosi_dmf <- inputi$doprinosi_dmf[inputi$scenarij==scnrj]
 # 3.2. OBVEZNICE - rast prinosa do kraja godine
-yld_sok <- 0.01
-
+yld_sok <- inputi$yld_sok[inputi$scenarij==scnrj]
 # 3.3. DIONICE - razina 6-mjesečnog VaR-a koju uzimamo za svaku pojedinu dionicu
-kvantil_dionice <- 0.05
-
+kvantil_dionice <- inputi$kvantil_dionice[inputi$scenarij==scnrj]
 # 3.4. INVESTICIJSKI FONDOVI - razina 6-mjesečnog VaR-a koji uzimamo za svaki pojedini fond
-kvantil_ifondovi <- 0.05
-
+kvantil_ifondovi <- inputi$kvantil_ifondovi[inputi$scenarij==scnrj]
 # 3.5. NEKRETNINE - promjena cijena na godišnjoj razini
-delta_nekret <- -0.115
-
+delta_nekret <- inputi$delta_nekret[inputi$scenarij==scnrj]
 # 3.6. TEČAJ - kvantil polugodišnje promjene tečaja kojeg stresiramo (0.1 - aprecijacija, 0.9 - deprecijacija)
-kvantil_tecaj <- 0.9
-
+# kvantil_tecaj <- inputi$kvantil_tecaj[inputi$scenarij==scnrj]
+ tecaj_proc <- inputi$tecaj_proc[inputi$scenarij==scnrj]
 # 4. Stresiranje obvezničkog portfelja ####
 
 # 3.1. Popis obveznica - input za bloomberg
@@ -213,7 +217,7 @@ rm(pom1,pom2,temp,i,f_cijena,procjena)
 
 # 3.6. Simulacija vrijednosti ulaganja u obveznice
 
-pom1 <- obveznice %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski") & datum=="2020-06-30")) %>% mutate(dospijece=if_else(dospijece<="2020-12-31",make_date(2021,1,31),dospijece),rocnost=as.numeric((dospijece-datum)/365),M=nominala,n=frekvencija,P=jed_cijena*M,C=(kupon/100)*M/n) %>% mutate(datum="2020-12-31",ytm=ifelse(!drzava %in% c("DE","US"),ytm+yld_sok,ytm),P1=ifelse(is.na(rocnost),C*n/ytm,C/(ytm/n)*(1-1/((1+ytm/n)^(n*rocnost))) + M/((1+ytm/n)^(n*rocnost))),iznos=ifelse(is.na(ytm),iznos,ifelse(!drzava %in% c("DE","US"),ifelse(is.na(tecaj),P1+C,(P1+C)*tecaj),iznos))) %>% select(-rocnost,-M,-n,-P,-P1,-C)
+pom1 <- obveznice %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0 %in% c("Mirovinski","Investicijski") & datum=="2020-06-30")) %>% mutate(dospijece=if_else(dospijece<="2020-12-31",make_date(2021,1,31),dospijece),rocnost=as.numeric((dospijece-datum)/365),M=nominala,n=frekvencija,P=jed_cijena*M,C=(kupon/100)*M/n) %>% mutate(datum="2020-12-31",ytm=ifelse(!drzava %in% c("DE","US"),ytm+yld_sok,ytm),P1=ifelse(is.na(rocnost),C*n/ytm,C/(ytm/n)*(1-1/((1+ytm/n)^(n*rocnost))) + M/((1+ytm/n)^(n*rocnost))),iznos=ifelse(is.na(ytm),iznos,ifelse(vrednovanje %in% c("Metoda amortiziranog troška","Alternative valuation methods"),iznos,ifelse(!drzava %in% c("DE","US"),ifelse(is.na(tecaj),P1+C,(P1+C)*tecaj),iznos)))) %>% select(-rocnost,-M,-n,-P,-P1,-C)
 obveznice <- rbind(obveznice,pom1)
 pom <- obveznice %>% group_by(datum,vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
 ggplot(pom,aes(x=datum,y=iznos)) + geom_line(size=1.1) + facet_wrap(~vrsta0,scales = "free") + scale_y_continuous(labels = scales::comma)
@@ -386,29 +390,42 @@ rm(pom1,pom2)
 
 # 12. Tečaj ####
 
+# Izračun preko kvantila
+
 # Dohvat tečaja sa EUR/HRK (s ECB-a)
-pom1 <- get_data("EXR.Q.HRK+USD.EUR.SP00.E") %>% select(obstime,currency,tecaj=obsvalue) %>% mutate(datum = make_date(ifelse(substr(obstime,7,7)=="4",as.numeric(substr(obstime,1,4))+1,as.numeric(substr(obstime,1,4))), ifelse(substr(obstime,7,7)=="4",1,as.numeric(substr(obstime,7,7))*3+1), 1)-1) %>% select(-obstime) %>% spread(currency,tecaj)
+# pom1 <- get_data("EXR.Q.HRK+USD.EUR.SP00.E") %>% select(obstime,currency,tecaj=obsvalue) %>% mutate(datum = make_date(ifelse(substr(obstime,7,7)=="4",as.numeric(substr(obstime,1,4))+1,as.numeric(substr(obstime,1,4))), ifelse(substr(obstime,7,7)=="4",1,as.numeric(substr(obstime,7,7))*3+1), 1)-1) %>% select(-obstime) %>% spread(currency,tecaj)
 # dohvaćanje VaR vrijednosti deprecijacije tečaja
-fx_faktor <- pom1 %>% arrange(datum) %>% mutate(dtecaj=HRK/lag(HRK,2)-1) %>% summarise(fx_var=quantile(dtecaj,probs = kvantil_tecaj,na.rm = T)) %>% as.numeric()
+# fx_faktor <- pom1 %>% arrange(datum) %>% mutate(dtecaj=HRK/lag(HRK,2)-1) %>% summarise(fx_var=quantile(dtecaj,probs = kvantil_tecaj,na.rm = T)) %>% as.numeric()
 # izračun
-tecaj <- imovina %>% filter(datum=="2020-12-31") %>% group_by(datum,vrsta0,vrsta1,vrsta2,subjekt,valuta) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% mutate(iznos=ifelse(!valuta %in% c("HRK","Nepoznata domena","N/A"),iznos*fx_faktor,0)) %>% mutate(drzava=NA,vrednovanje=NA,isin=NA,razina1="Tečajne promjene")
-rm(pom1,fx_faktor)
+# tecaj <- imovina %>% filter(datum=="2020-12-31") %>% group_by(datum,vrsta0,vrsta1,vrsta2,subjekt,valuta) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% mutate(iznos=ifelse(!valuta %in% c("HRK","Nepoznata domena","N/A"),iznos*fx_faktor,0)) %>% mutate(drzava=NA,vrednovanje=NA,isin=NA,razina1="Tečajne promjene")
+
+# Izračun preko ručnog unosa
+ pom1 <- get_data("EXR.Q.HRK+USD.EUR.SP00.E") %>% select(obstime,currency,tecaj=obsvalue) %>% mutate(datum = make_date(ifelse(substr(obstime,7,7)=="4",as.numeric(substr(obstime,1,4))+1,as.numeric(substr(obstime,1,4))), ifelse(substr(obstime,7,7)=="4",1,as.numeric(substr(obstime,7,7))*3+1), 1)-1) %>% select(-obstime) %>% spread(currency,tecaj) %>% filter(datum=="2020-06-30") %>% select(HRK) %>% as.numeric()
+ tecaj <- imovina %>% filter(datum=="2020-12-31") %>% group_by(datum,vrsta0,vrsta1,vrsta2,subjekt,valuta) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% mutate(iznos=ifelse(!valuta %in% c("HRK","Nepoznata domena","N/A"),iznos*(tecaj_proc/pom1-1),0)) %>% mutate(drzava=NA,vrednovanje=NA,isin=NA,razina1="Tečajne promjene")
+rm(pom1)
 
 # 13. Konačno spajanje imovine ####
-imovina <- rbind(imovina,neto_uplate,tecaj)
+imovina <- rbind(imovina,neto_uplate,tecaj) %>% mutate(scenarij=scnrj)
+if (scnrj=="Scenarij1"){
+  imovina_konacno <- imovina
+} else{
+  imovina <- imovina %>% filter(datum=="2020-12-31" | datum=="2020-03-31" | datum=="2020-06-30")
+  imovina_konacno <- rbind(imovina_konacno,imovina)  
+}
+
+# spremanje
+imovina <- imovina_konacno
+rm(imovina_konacno,delta_nekret,doprinosi_dmf,doprinosi_omf,kvantil_dionice,kvantil_ifondovi,kvantil_tecaj,tecaj_proc,scnrj)
 save(imovina,file="imovina_sim.Rda")
-
-
-pom <- imovina %>% group_by(datum,vrsta1) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% spread(vrsta1,iznos)
-skopiraj(pom)
+rm(obveznice,dionice,ifondovi,nekretnine,neto_uplate,tecaj,ostatak)
 
 # dekompozicija promjene
-pom0 <- imovina %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0!="Osiguranja" & datum=="2020-06-30")) %>% filter(vrsta0!="Poseban" & vrsta1!="AIF") %>% group_by(vrsta0) %>% summarise(baza=sum(iznos,na.rm=T))
-pom <- imovina %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0!="Osiguranja" & datum=="2020-06-30") | datum=="2020-12-31") %>% filter(vrsta0!="Poseban" & vrsta1!="AIF") %>% group_by(datum,vrsta0,razina1) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% arrange(datum) %>% group_by(vrsta0,razina1) %>% mutate(iznos=ifelse(!razina1 %in% c("Tečajne promjene","Neto uplate"),iznos-lag(iznos,1),iznos)) %>% na.omit() %>% left_join(pom0,by="vrsta0") %>% mutate(iznos=iznos/baza)
-pom1 <- pom %>% group_by(vrsta0) %>% summarise(iznos=sum(iznos,na.rm=T))
-ggplot(pom,aes(x=vrsta0,y=iznos,fill=razina1)) + geom_col(alpha=0.9) + facet_grid(~vrsta0,scales = "free_x") + boje_fill + scale_y_continuous(labels = percent) + geom_hline(yintercept = 0,col="red",linetype=2,size=1.1) + geom_point(data = pom1,inherit.aes = F,aes(x=vrsta0,y=iznos),size=4) + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) + labs(x="",y="",caption="Izvor: Hanfa",subtitle = "Dekompozicija relativne promjene imovine društava, u %",title="Slika XX. Bla")
+pom0 <- imovina %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0!="Osiguranja" & datum=="2020-06-30")) %>% filter(vrsta0!="Poseban" & vrsta1!="AIF" & scenarij=="Scenarij1") %>% group_by(vrsta0) %>% summarise(baza=sum(iznos,na.rm=T))
+pom <- imovina %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0!="Osiguranja" & datum=="2020-06-30") | datum=="2020-12-31") %>% filter(vrsta0!="Poseban" & vrsta1!="AIF") %>% group_by(datum,vrsta0,scenarij,razina1) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% arrange(datum) %>% group_by(vrsta0,scenarij,razina1) %>% mutate(iznos=ifelse(!razina1 %in% c("Tečajne promjene","Neto uplate"),iznos-lag(iznos,1),iznos)) %>% na.omit() %>% left_join(pom0,by="vrsta0") %>% mutate(iznos=iznos/baza)
+pom1 <- pom %>% group_by(vrsta0,scenarij) %>% summarise(iznos=sum(iznos,na.rm=T))
+ggplot(pom,aes(x=scenarij,y=iznos,fill=razina1)) + geom_col(alpha=0.9) + facet_grid(~vrsta0,scales = "free_x") + boje_fill + scale_y_continuous(labels = percent) + geom_hline(yintercept = 0,col="red",linetype=2,size=1.1) + geom_point(data = pom1,inherit.aes = F,aes(x=scenarij,y=iznos),size=4) + labs(x="",y="",caption="Napomena: S obzirom na dostupnost podataka, promjena imovine na kraju 2020. kod društava za osiguranje prikazana \nje u odnosnu na kraj ožujka, dok je kod mirovinskih i investicijskih fondova prikazana u odnosu na kraj lipnja.\nIzvor: Hanfa",subtitle = "Dekompozicija relativne promjene imovine sektora, u %",title="Slika XX. Bla")
 rm(pom0,pom1)
 
 # distribucija po društvu
-pom <- imovina %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0!="Osiguranja" & datum=="2020-06-30") | datum=="2020-12-31") %>% filter(vrsta0!="Poseban" & vrsta1!="AIF") %>% group_by(datum,vrsta0,subjekt) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% arrange(datum) %>% group_by(vrsta0,subjekt) %>% mutate(delta=iznos/lag(iznos,na.rm=T)-1) %>% na.omit()
-ggplot(pom %>% filter(subjekt!="Triglav Emerging Bond (HRNFDAUEMBA7)"),aes(x=1,y=delta,col=vrsta0)) + geom_jitter(aes(size=iznos),alpha=0.6) + facet_wrap(~vrsta0,scales = "free_x") + boje_col  + scale_y_continuous(labels = percent) + theme(legend.position = "none",axis.text.x=element_blank(),axis.ticks.x=element_blank()) + labs(x="",y="",caption="Napomena: Veličina točke označuje simuliranu veličinu fonda, odnosno društva za osiguranje na kraju 2020.\nIzvor: Hanfa",subtitle = "Relativna promjena vrijednosti imovine, u %", title = "Slika XX. Izražena divergencija rezultata unutar pojedinih industrija") + scale_size_continuous(range = c(2, 10))
+pom <- imovina %>% filter((vrsta0=="Osiguranja" & datum=="2020-03-31") | (vrsta0!="Osiguranja" & datum=="2020-06-30") | datum=="2020-12-31") %>% filter(vrsta0!="Poseban" & vrsta1!="AIF") %>% group_by(datum,vrsta0,scenarij,subjekt) %>% summarise(iznos=sum(iznos,na.rm=T)) %>% arrange(datum) %>% group_by(vrsta0,scenarij,subjekt) %>% mutate(delta=iznos/lag(iznos,na.rm=T)-1) %>% na.omit()
+ggplot(pom %>% filter(subjekt!="Triglav Emerging Bond (HRNFDAUEMBA7)"),aes(x=1,y=delta,col=scenarij)) + geom_jitter(aes(size=iznos),alpha=0.6) + facet_wrap(~vrsta0,scales = "free_x") + boje_col  + scale_y_continuous(labels = percent) + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) + labs(x="",y="",caption="Napomena: Veličina točke označuje simuliranu veličinu fonda, odnosno društva za osiguranje na kraju 2020.\nIzvor: Hanfa",subtitle = "Relativna promjena vrijednosti imovine, u %", title = "Slika XX. Izražena divergencija rezultata unutar pojedinih industrija") + scale_size_continuous(range = c(2, 10),guide="none") + guides(colour = guide_legend(override.aes = list(size=6)))

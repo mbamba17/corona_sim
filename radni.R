@@ -156,3 +156,5 @@ pom <- nav_opce %>% filter(izvjestaj=="NAV" & vrsta0!="Poseban" & (datum=="2020-
 ggplot(pom %>% filter(subjekt!="InterCapital Short Term Bond (HRVBINUVBCA6)"),aes(x=1,y=prinos,col=vrsta0)) + geom_jitter(alpha=0.6,aes(size=nav)) + facet_wrap(~vrsta0,scales = "free_x") + boje_col  + scale_y_continuous(labels = percent) + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
 
 pom <- nav_opce %>% filter(izvjestaj=="NAV" & vrsta0!="Poseban" & (datum=="2020-01-31" | datum=="2020-03-31")) %>% select(datum,vrsta0,vrsta1,vrsta2,vrsta4,subjekt,cj_udjela_u_valuti,nav) %>% arrange(datum) %>% group_by(vrsta0,subjekt) %>% mutate(prinos=cj_udjela_u_valuti/lag(cj_udjela_u_valuti)-1) %>% group_by(vrsta0,vrsta1,vrsta2,vrsta4) %>% summarise(prinos=weighted.mean(prinos,w = nav,na.rm = T))
+
+
